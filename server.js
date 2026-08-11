@@ -145,5 +145,44 @@ Return ONLY a valid JSON object matching this exact schema:
     ]
   });
 });
+// ==========================================
+// ROUTE 3: AI Lyrics Editor & Formatter
+// ==========================================
+app.post('/api/ai/format-lyrics', async (req, res) => {
+  const { title, artist, rawLyrics } = req.body;
+
+  const systemInstruction = `You are an expert Audio Engineer and Lyrics Synchronization Specialist.
+Convert raw lyrics into a structured JSON array with estimated startTime timestamps (in seconds) for synchronized playback.
+Return ONLY valid JSON matching this schema:
+[
+  { "startTime": 0, "text": "First line" },
+  { "startTime": 5, "text": "Second line" }
+]`;
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Song Title: ${title || 'Untitled'}\nArtist: ${artist || 'Unknown'}\nRaw Lyrics:\n${rawLyrics}`,
+        config: {
+          systemInstruction: systemInstruction,
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const formattedLyrics = JSON.parse(response.text);
+      return res.json({ lyrics: formattedLyrics });
+    } catch (err) {
+      console.error("Gemini Lyrics Editor Error:", err);
+    }
+  }
+
+  // Fallback Formatter
+  const fallbackLines = rawLyrics 
+    ? rawLyrics.split('\n').filter(l => l.trim()).map((line, idx) => ({ startTime: idx * 5, text: line.trim() }))
+    : [{ startTime: 0, text: "No lyrics provided." }];
+
+  res.json({ lyrics: fallbackLines });
+});
 
 app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
