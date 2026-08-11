@@ -4,9 +4,9 @@ import cors from 'cors';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Universal CORS Middleware for GitHub Pages Client
+// Enable CORS for all incoming client requests
 app.use(cors({
-  origin: '*', // Allows requests from GitHub Pages and local environments
+  origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -16,7 +16,7 @@ app.use(express.json());
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID || "8c478376-6cca-4f50-871b-03d4948fbd56";
 const APPSHEET_APP_KEY = process.env.APPSHEET_APP_KEY;
 
-// Route 1: Retrieve Track Data
+// API Route: Track Details
 app.get('/api/track/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -50,7 +50,7 @@ app.get('/api/track/:id', async (req, res) => {
     }
   }
 
-  // Guaranteed Active Payload Fallback
+  // Active Fallback Payload
   res.json({
     trackId: id,
     title: "Karaoke & Songs Appreciation",
@@ -65,38 +65,38 @@ app.get('/api/track/:id', async (req, res) => {
   });
 });
 
-// Route 2: AI Storyboard Prompt Endpoint
+// API Route: AI Storyboard
 app.post('/api/ai/storyboard', (req, res) => {
   const { title, artist, lyrics } = req.body;
   const lyricLines = lyrics ? lyrics.split('\n').filter(l => l.trim()) : [];
 
   res.json({
     title: title || "Untitled Track",
-    conceptOverview: `A visual narrative depicting key themes in "${title || 'this track'}" by ${artist || 'Artist'}. Optimized for video generation.`,
+    conceptOverview: `Visual narrative depicting key themes in "${title || 'this track'}" by ${artist || 'Artist'}.`,
     scenes: [
       {
         sceneNumber: 1,
         lyricSegment: lyricLines[0] || "Intro Line",
-        visualDescription: "Atmospheric opening shot establishing tone and setting.",
-        aiVideoPrompt: "Cinematic wide shot, dramatic moody lighting, photorealistic, 8k --ar 16:9"
+        visualDescription: "Atmospheric opening shot establishing mood.",
+        aiVideoPrompt: "Cinematic wide shot, dramatic lighting, photorealistic 8k --ar 16:9"
       },
       {
         sceneNumber: 2,
         lyricSegment: lyricLines[1] || "Verse Line",
-        visualDescription: "Medium focal length shot tracking subject motion.",
-        aiVideoPrompt: "Medium shot, golden hour illumination, warm tones, high detail --ar 16:9"
+        visualDescription: "Tracking medium shot following subject motion.",
+        aiVideoPrompt: "Medium shot, golden hour glow, hyper-detailed --ar 16:9"
       },
       {
         sceneNumber: 3,
-        lyricSegment: lyricLines[2] || "Chorus Line",
-        visualDescription: "Peak visual energy matching chorus intensity.",
-        aiVideoPrompt: "Dynamic camera movement, vibrant neon aesthetics, volumetric haze --ar 16:9"
+        lyricSegment: lyricLines[2] || "Chorus Peak",
+        visualDescription: "Vibrant visual climax matching chorus energy.",
+        aiVideoPrompt: "Dynamic camera movement, neon aesthetics --ar 16:9"
       },
       {
         sceneNumber: 4,
-        lyricSegment: lyricLines[3] || "Outro Line",
-        visualDescription: "Resolving lingering shot concluding narrative arc.",
-        aiVideoPrompt: "Wide reflective horizon at dusk, subtle particle effects, cinematic finish --ar 16:9"
+        lyricSegment: lyricLines[3] || "Outro Fade",
+        visualDescription: "Resolving landscape shot concluding narrative.",
+        aiVideoPrompt: "Wide reflective horizon at dusk, subtle atmosphere --ar 16:9"
       }
     ]
   });
