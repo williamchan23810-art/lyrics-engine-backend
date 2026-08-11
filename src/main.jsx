@@ -1,23 +1,42 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Sample track data for initial testing
-const sampleTrack = {
-  trackId: "track_001",
-  title: "Sample Song Title",
-  artist: "Artist Name",
-  audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-  lyrics: [
-    { startTime: 0, text: "Intro Instrumental..." },
-    { startTime: 10, text: "First line of synchronized lyrics" },
-    { startTime: 15, text: "Second line scrolling into view smoothly" },
-    { startTime: 20, text: "Enjoy your custom Lyrics-Engine interface!" }
-  ]
+// Production API base URL pointing to Render backend gateway
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://lyrics-engine-api.onrender.com' 
+  : '';
+
+const App = () => {
+  const [trackData, setTrackData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/track/1`)
+      .then((res) => res.json())
+      .then((data) => {
+        setTrackData(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to load track data:", err);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-950 text-amber-400 font-sans font-medium">
+        Loading Lyrics-Engine Studio...
+      </div>
+    );
+  }
+
+  return <LyricsEnginePlayer trackData={trackData} apiBaseUrl={API_BASE_URL} />;
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <LyricsEnginePlayer trackData={sampleTrack} />
+    <App />
   </React.StrictMode>
 );
