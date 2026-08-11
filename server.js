@@ -4,7 +4,7 @@ import cors from 'cors';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for all incoming client requests
+// Universal CORS Middleware for GitHub Pages and local development
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -13,13 +13,17 @@ app.use(cors({
 
 app.use(express.json());
 
+// AppSheet Configuration Settings
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID || "8c478376-6cca-4f50-871b-03d4948fbd56";
 const APPSHEET_APP_KEY = process.env.APPSHEET_APP_KEY;
 
-// API Route: Track Details
+// ==========================================
+// ROUTE 1: GET Track & Synchronized Lyrics
+// ==========================================
 app.get('/api/track/:id', async (req, res) => {
   const { id } = req.params;
 
+  // Query AppSheet REST API v2 if the Application Access Key is present
   if (APPSHEET_APP_KEY) {
     try {
       const response = await fetch(`https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table 1/Action`, {
@@ -34,6 +38,7 @@ app.get('/api/track/:id', async (req, res) => {
           Selector: `Filter(Table 1, [_RowNumber] = "${id}")`
         })
       });
+
       const data = await response.json();
       if (data && data[0]) {
         const row = data[0];
@@ -46,11 +51,11 @@ app.get('/api/track/:id', async (req, res) => {
         });
       }
     } catch (e) {
-      console.error("AppSheet API Fetch Error:", e);
+      console.error("AppSheet REST API Fetch Error:", e);
     }
   }
 
-  // Active Fallback Payload
+  // Active Fallback Payload: Guarantees data response even during key warmups
   res.json({
     trackId: id,
     title: "Karaoke & Songs Appreciation",
@@ -65,41 +70,46 @@ app.get('/api/track/:id', async (req, res) => {
   });
 });
 
-// API Route: AI Storyboard
+// ==========================================
+// ROUTE 2: AI Storyboard Prompt Generator
+// ==========================================
 app.post('/api/ai/storyboard', (req, res) => {
   const { title, artist, lyrics } = req.body;
   const lyricLines = lyrics ? lyrics.split('\n').filter(l => l.trim()) : [];
 
-  res.json({
+  const storyboardPayload = {
     title: title || "Untitled Track",
-    conceptOverview: `Visual narrative depicting key themes in "${title || 'this track'}" by ${artist || 'Artist'}.`,
+    conceptOverview: `A visual narrative depicting key themes in "${title || 'this track'}" by ${artist || 'Artist'}. Optimized for video generation.`,
     scenes: [
       {
         sceneNumber: 1,
         lyricSegment: lyricLines[0] || "Intro Line",
-        visualDescription: "Atmospheric opening shot establishing mood.",
-        aiVideoPrompt: "Cinematic wide shot, dramatic lighting, photorealistic 8k --ar 16:9"
+        visualDescription: "Atmospheric opening shot establishing tone and setting.",
+        aiVideoPrompt: "Cinematic wide shot, dramatic moody lighting, photorealistic, 8k --ar 16:9"
       },
       {
         sceneNumber: 2,
         lyricSegment: lyricLines[1] || "Verse Line",
-        visualDescription: "Tracking medium shot following subject motion.",
-        aiVideoPrompt: "Medium shot, golden hour glow, hyper-detailed --ar 16:9"
+        visualDescription: "Medium focal length shot tracking subject motion.",
+        aiVideoPrompt: "Medium shot, golden hour illumination, warm tones, high detail --ar 16:9"
       },
       {
         sceneNumber: 3,
-        lyricSegment: lyricLines[2] || "Chorus Peak",
-        visualDescription: "Vibrant visual climax matching chorus energy.",
-        aiVideoPrompt: "Dynamic camera movement, neon aesthetics --ar 16:9"
+        lyricSegment: lyricLines[2] || "Chorus Line",
+        visualDescription: "Peak visual energy matching chorus intensity.",
+        aiVideoPrompt: "Dynamic camera movement, vibrant neon aesthetics, volumetric haze --ar 16:9"
       },
       {
         sceneNumber: 4,
-        lyricSegment: lyricLines[3] || "Outro Fade",
-        visualDescription: "Resolving landscape shot concluding narrative.",
-        aiVideoPrompt: "Wide reflective horizon at dusk, subtle atmosphere --ar 16:9"
+        lyricSegment: lyricLines[3] || "Outro Line",
+        visualDescription: "Resolving lingering shot concluding narrative arc.",
+        aiVideoPrompt: "Wide reflective horizon at dusk, subtle particle effects, cinematic finish --ar 16:9"
       }
     ]
-  });
+  };
+
+  res.json(storyboardPayload);
 });
 
-app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
+// Start Express Gateway
+app.listen(PORT, () => console.log(`Lyrics-Engine Gateway active on port ${PORT}`));
