@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 const app = express();
 app.use(express.json());
 
-const ai = new GoogleGenAI(); // Process.env.GEMINI_API_KEY required
+const ai = new GoogleGenAI(); // Reads GEMINI_API_KEY from environment variables
 
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID;
 const APPSHEET_KEY = process.env.APPSHEET_ACCESS_KEY;
@@ -20,7 +20,7 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
   res.status(200).json({ status: 'Processing' });
 
   try {
-    const prompt = `Analyze "${songTitle}" by "${artist}". Extract composer, release year, origin backstory, song meaning, and generate an 8-frame Pixar 3D video storyboard sequence in 9:16 portrait ratio. Note: The user can search for full lyrics directly via Google Search.`;
+    const prompt = `Analyze the song "${songTitle}" by "${artist}". Extract the music composer, lyricist, release year, origin backstory, song meaning, and generate an 8-frame Pixar 3D video storyboard sequence in 9:16 portrait ratio. Note: Users can search for full lyrics directly via Google Search.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -31,7 +31,8 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            composer: { type: Type.STRING },
+            music_composer: { type: Type.STRING },
+            lyricist: { type: Type.STRING },
             release_year: { type: Type.INTEGER },
             origin_story: { type: Type.STRING },
             song_meaning: { type: Type.STRING },
@@ -48,14 +49,14 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
               }
             }
           },
-          required: ["composer", "release_year", "origin_story", "song_meaning", "frames"]
+          required: ["music_composer", "lyricist", "release_year", "origin_story", "song_meaning", "frames"]
         }
       }
     });
 
     const parsed = JSON.parse(response.text);
 
-    // Update record in AppSheet Database via REST API
+    // Map payload back to AppSheet 20-column database table
     const updatePayload = {
       Action: "Edit",
       Properties: { Locale: "en-US" },
@@ -63,7 +64,8 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
         {
           "Row ID": rowId,
           "Status": "complete",
-          "Composer": parsed.composer,
+          "Music Composer": parsed.music_composer,
+          "Lyricist": parsed.lyricist,
           "Release Year": parsed.release_year,
           "Origin Story": parsed.origin_story,
           "Song Meaning": parsed.song_meaning,
@@ -79,7 +81,9 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
       ]
     };
 
-    await fetch(`https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table%201/Action`, {
+    const targetUrl = `https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table%201/Action`;
+
+    await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'ApplicationAccessKey': APPSHEET_KEY,
@@ -89,9 +93,9 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Webhook execution failed:', err);
+    console.error('Webhook processing failed:', err);
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Lyrics Engine middleman running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Lyrics Engine running on port ${PORT}`));
