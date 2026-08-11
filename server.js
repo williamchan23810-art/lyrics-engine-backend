@@ -145,6 +145,7 @@ Return ONLY a valid JSON object matching this exact schema:
     ]
   });
 });
+
 // ==========================================
 // ROUTE 3: AI Lyrics Editor & Formatter
 // ==========================================
