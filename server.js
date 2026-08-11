@@ -4,7 +4,6 @@ import { GoogleGenAI, Type } from '@google/genai';
 const app = express();
 app.use(express.json());
 
-// Explicitly pass apiKey options object to satisfy constructor initialization
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID;
@@ -14,10 +13,10 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
   const { rowId, songTitle, artist } = req.body;
 
   if (!rowId || !songTitle || !artist) {
-    return res.status(400).json({ error: 'Missing required payload parameters.' });
+    return res.status(400).json({ error: 'Missing required parameters: rowId, songTitle, or artist.' });
   }
 
-  // Acknowledge webhook immediately to prevent execution timeout in AppSheet
+  // Acknowledge AppSheet immediately to prevent timeout
   res.status(200).json({ status: 'Processing' });
 
   try {
@@ -50,7 +49,7 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
               }
             }
           },
-          required: ["music_composer", "lyricist", "release_year", "origin_story", "song_meaning", "frames"]
+          required: ["music_composer", "lyricist", "origin_story", "song_meaning", "frames"]
         }
       }
     });
@@ -64,7 +63,7 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
       Rows: [
         {
           "Row ID": rowId,
-          "Status": "complete",
+          "Status": "Complete",
           "Music Composer": parsed.music_composer,
           "Lyricist": parsed.lyricist,
           "Release Year": parsed.release_year,
@@ -82,9 +81,7 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
       ]
     };
 
-    const targetUrl = `https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table%201/Action`;
-
-    await fetch(targetUrl, {
+    await fetch(`https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table%201/Action`, {
       method: 'POST',
       headers: {
         'ApplicationAccessKey': APPSHEET_KEY,
@@ -94,9 +91,9 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Webhook execution failed:', err);
+    console.error('Webhook processing failed:', err);
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Lyrics Engine middleman running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Lyrics Engine running on port ${PORT}`));
