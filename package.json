@@ -1,13 +1,24 @@
 {
-  "name": "lyrics-engine-backend",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LyricsEngineTrackData",
+  "type": "object",
+  "properties": {
+    "trackId": { "type": "string" },
+    "title": { "type": "string" },
+    "artist": { "type": "string" },
+    "audioUrl": { "type": "string", "format": "uri" },
+    "lyrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "startTime": { "type": "number", "description": "Start time in seconds" },
+          "endTime": { "type": "number", "description": "End time in seconds" },
+          "text": { "type": "string" }
+        },
+        "required": ["startTime", "text"]
+      }
+    }
   },
-  "dependencies": {
-    "@google/genai": "^0.2.0",
-    "express": "^4.19.2"
-  }
+  "required": ["trackId", "title", "artist", "audioUrl", "lyrics"]
 }
