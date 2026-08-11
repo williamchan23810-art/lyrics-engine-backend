@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Production API Gateway on Render
+// Exact Render service URL generated in your deployment dashboard
 const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
 
 const App = () => {
@@ -11,13 +11,28 @@ const App = () => {
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/track/1`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
         setTrackData(data);
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to connect to API Gateway:", err);
+        console.warn("API Gateway fetch warning, loading local fallback:", err);
+        setTrackData({
+          trackId: "1",
+          title: "Karaoke & Songs Appreciation",
+          artist: "William H Chan Studio",
+          audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+          lyrics: [
+            { startTime: 0, text: "Welcome to Lyrics-Engine Studio" },
+            { startTime: 5, text: "Synchronized audio playback active" },
+            { startTime: 10, text: "Switch typography using Cambria font controls" },
+            { startTime: 15, text: "Click AI Storyboard to generate video prompts" }
+          ]
+        });
         setLoading(false);
       });
   }, []);
