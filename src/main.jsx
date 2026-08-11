@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Target the correct active Render URL
+// Production API Gateway hosted on Render
 const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
 
 const App = () => {
@@ -10,17 +10,15 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/track/1`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server returned status ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
+    const fetchTrack = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/track/1`);
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+        const data = await res.json();
         setTrackData(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.warn("API Gateway fetch error, applying fallback state:", err);
+      } catch (err) {
+        console.warn("API Gateway initial connection warning, applying client fallback state:", err);
+        // Resilient fallback payload ensuring UI displays immediately
         setTrackData({
           trackId: "1",
           title: "Karaoke & Songs Appreciation",
@@ -33,14 +31,19 @@ const App = () => {
             { startTime: 15, text: "Click AI Storyboard to generate video prompts" }
           ]
         });
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchTrack();
   }, []);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950 text-amber-400 font-sans font-medium">
-        Connecting to Lyrics-Engine Gateway...
+      <div className="flex flex-col items-center justify-center h-screen bg-slate-950 text-amber-400 font-sans space-y-3">
+        <div className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-sm font-medium">Connecting to Lyrics-Engine Gateway...</p>
       </div>
     );
   }
