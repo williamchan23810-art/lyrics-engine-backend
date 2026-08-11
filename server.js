@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,8 +14,8 @@ app.use(cors({
 
 app.use(express.json());
 
-// Initialize Gemini SDK with existing Render Environment Variable
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini Client
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID || "8c478376-6cca-4f50-871b-03d4948fbd56";
 const APPSHEET_APP_KEY = process.env.APPSHEET_APP_KEY;
@@ -78,37 +78,37 @@ app.get('/api/track/:id', async (req, res) => {
 app.post('/api/ai/storyboard', async (req, res) => {
   const { title, artist, lyrics } = req.body;
 
-  const systemInstruction = `You are an expert AI Cinematographer and Video Director. 
-Analyze the provided song title, artist, and lyrics, then create a cohesive 4-scene video storyboard.
-Return ONLY a valid JSON object matching this exact schema:
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: "application/json" }
+      });
+
+      const prompt = `You are an expert AI Cinematographer. Analyze the following track and return ONLY a valid JSON object matching this schema:
 {
   "title": "Song Title",
-  "conceptOverview": "A brief 2-sentence visual overview of the creative concept.",
+  "conceptOverview": "A brief 2-sentence visual overview of the video concept.",
   "scenes": [
     {
       "sceneNumber": 1,
-      "lyricSegment": "Exact lyric line or theme",
+      "lyricSegment": "Exact line or snippet",
       "visualDescription": "Detailed shot description and lighting mood",
       "aiVideoPrompt": "Cinematic text-to-video generation prompt ending with --ar 16:9"
     }
   ]
-}`;
+}
 
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `Song Title: ${title || 'AppSheet Track'}\nArtist: ${artist || 'Unknown'}\nLyrics:\n${lyrics || ''}`,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: 'application/json'
-        }
-      });
+Song Title: ${title || 'AppSheet Track'}
+Artist: ${artist || 'Unknown'}
+Lyrics:
+${lyrics || 'Instrumental'}`;
 
-      const storyboardData = JSON.parse(response.text);
+      const result = await model.generateContent(prompt);
+      const storyboardData = JSON.parse(result.response.text());
       return res.json(storyboardData);
     } catch (err) {
-      console.error("Gemini API call failed, deploying fallback payload:", err);
+      console.error("Gemini Storyboard Generation Error:", err);
     }
   }
 
@@ -152,26 +152,26 @@ Return ONLY a valid JSON object matching this exact schema:
 app.post('/api/ai/format-lyrics', async (req, res) => {
   const { title, artist, rawLyrics } = req.body;
 
-  const systemInstruction = `You are an expert Audio Engineer and Lyrics Synchronization Specialist.
-Convert raw lyrics into a structured JSON array with estimated startTime timestamps (in seconds) for synchronized playback.
-Return ONLY valid JSON matching this schema:
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        generationConfig: { responseMimeType: "application/json" }
+      });
+
+      const prompt = `You are an expert Audio Engineer. Convert these raw lyrics into a JSON array of timestamped lines spaced naturally (in seconds). Return ONLY valid JSON:
 [
   { "startTime": 0, "text": "First line" },
   { "startTime": 5, "text": "Second line" }
-]`;
+]
 
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `Song Title: ${title || 'Untitled'}\nArtist: ${artist || 'Unknown'}\nRaw Lyrics:\n${rawLyrics}`,
-        config: {
-          systemInstruction: systemInstruction,
-          responseMimeType: 'application/json'
-        }
-      });
+Song Title: ${title || 'Untitled'}
+Artist: ${artist || 'Unknown'}
+Raw Lyrics:
+${rawLyrics}`;
 
-      const formattedLyrics = JSON.parse(response.text);
+      const result = await model.generateContent(prompt);
+      const formattedLyrics = JSON.parse(result.response.text());
       return res.json({ lyrics: formattedLyrics });
     } catch (err) {
       console.error("Gemini Lyrics Editor Error:", err);
