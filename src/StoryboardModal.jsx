@@ -1,70 +1,70 @@
 import React, { useState } from 'react';
-import { Sparkles, X, Copy, Check, Film, Loader2, AlertCircle } from 'lucide-react';
+import { Sparkles, X, Copy, Check, Film, Loader2 } from 'lucide-react';
 
 const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyrics-engine-backend-1.onrender.com' }) => {
   const [loading, setLoading] = useState(false);
   const [storyboard, setStoryboard] = useState(null);
-  const [error, setError] = useState(null);
   const [copiedIdx, setCopiedIdx] = useState(null);
 
   if (!isOpen) return null;
 
-  // Fallback visual script ensuring UI always renders content
-  const fallbackStoryboard = {
+  // Instant local payload ensuring immediate visual response
+  const fallbackData = {
     title: trackData?.title || "Karaoke & Songs Appreciation",
-    conceptOverview: `A vibrant visual narrative showcasing core musical themes for "${trackData?.title || 'Karaoke Track'}" by ${trackData?.artist || 'William H Chan Studio'}.`,
+    conceptOverview: `A visual narrative portraying core thematic beats in "${trackData?.title || 'this track'}" by ${trackData?.artist || 'William H Chan Studio'}.`,
     scenes: [
       {
         sceneNumber: 1,
         lyricSegment: trackData?.lyrics?.[0]?.text || "Welcome to Lyrics-Engine Studio",
-        visualDescription: "Wide cinematic opening shot establishing mood and lighting tone.",
-        aiVideoPrompt: "Cinematic wide shot, atmospheric lighting, photorealistic 8k --ar 16:9"
+        visualDescription: "Cinematic wide shot establishing setting, moody lighting, atmospheric depth.",
+        aiVideoPrompt: "Cinematic wide shot, dramatic lighting, photorealistic 8k --ar 16:9"
       },
       {
         sceneNumber: 2,
         lyricSegment: trackData?.lyrics?.[1]?.text || "Synchronized audio playback active",
-        visualDescription: "Medium focal length shot tracking main visual elements.",
-        aiVideoPrompt: "Medium shot, golden hour illumination, hyper-detailed --ar 16:9"
+        visualDescription: "Medium focal length shot tracking character expression and emotion.",
+        aiVideoPrompt: "Medium shot, golden hour glow, warm color grading, hyper-detailed --ar 16:9"
       },
       {
         sceneNumber: 3,
         lyricSegment: trackData?.lyrics?.[2]?.text || "Switch typography using Cambria font controls",
-        visualDescription: "Dynamic visual climax aligning with peak track energy.",
-        aiVideoPrompt: "Dynamic camera motion, vibrant neon aesthetics, volumetric haze --ar 16:9"
+        visualDescription: "Dynamic visual climax with high movement and rich visual contrast.",
+        aiVideoPrompt: "Fast motion tracking shot, vibrant neon aesthetics, volumetric haze --ar 16:9"
       },
       {
         sceneNumber: 4,
         lyricSegment: trackData?.lyrics?.[3]?.text || "Click AI Storyboard to generate video prompts",
-        visualDescription: "Resolving lingering wide shot concluding the story arc.",
-        aiVideoPrompt: "Wide reflective horizon at dusk, subtle particle atmosphere, cinematic finish --ar 16:9"
+        visualDescription: "Resolving landscape shot softly fading into dusk.",
+        aiVideoPrompt: "Wide horizon reflection at dusk, subtle particle atmosphere, cinematic finish --ar 16:9"
       }
     ]
   };
 
-  const generateStoryboard = async () => {
+  const generateStoryboard = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Step 1: Force UI loading spinner state immediately on click
     setLoading(true);
-    setError(null);
-
-    const payload = {
-      title: trackData?.title || "Karaoke & Songs Appreciation",
-      artist: trackData?.artist || "William H Chan Studio",
-      lyrics: trackData?.lyrics ? trackData.lyrics.map(l => l.text).join('\n') : "Sample lyrics segment"
-    };
 
     try {
       const response = await fetch(`${apiBaseUrl}/api/ai/storyboard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          title: trackData?.title || "Karaoke & Songs Appreciation",
+          artist: trackData?.artist || "William H Chan Studio",
+          lyrics: trackData?.lyrics ? trackData.lyrics.map(l => l.text).join('\n') : ""
+        })
       });
 
-      if (!response.ok) throw new Error(`Gateway status ${response.status}`);
+      if (!response.ok) throw new Error(`Gateway returned status ${response.status}`);
       const data = await response.json();
       setStoryboard(data);
     } catch (err) {
-      console.warn("API call failed, applying immediate UI fallback payload:", err);
-      // Fallback guarantees response on button click regardless of network state
-      setStoryboard(fallbackStoryboard);
+      console.warn("API request bypassed or delayed; rendering client fallback payload:", err);
+      // Step 2: Render local storyboard fallback so UI never hangs
+      setStoryboard(fallbackData);
     } finally {
       setLoading(false);
     }
@@ -80,13 +80,14 @@ const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyr
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
       <div className="relative w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         
-        {/* Header */}
+        {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-base">
             <Film size={18} />
             <span>AI Storyboard Generator</span>
           </div>
           <button 
+            type="button"
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-200 rounded-lg transition cursor-pointer"
           >
@@ -94,7 +95,7 @@ const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyr
           </button>
         </div>
 
-        {/* Body */}
+        {/* Modal Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {!storyboard && !loading && (
             <div className="flex flex-col items-center justify-center py-12 text-center space-y-4">
@@ -111,8 +112,9 @@ const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyr
               </div>
 
               <button
+                type="button"
                 onClick={generateStoryboard}
-                className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 px-5 py-2.5 rounded-lg font-semibold text-sm transition shadow-lg shadow-amber-400/10 active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 px-6 py-3 rounded-lg font-bold text-sm transition shadow-lg shadow-amber-400/20 active:scale-95 cursor-pointer"
               >
                 <Sparkles size={16} />
                 Generate Storyboard Prompts
@@ -120,15 +122,15 @@ const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyr
             </div>
           )}
 
-          {/* Loading Indicator */}
+          {/* Loading State */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-16 space-y-3">
-              <Loader2 size={32} className="text-amber-400 animate-spin" />
-              <p className="text-xs text-slate-400 font-medium">Drafting visual prompts with AI Agent...</p>
+              <Loader2 size={36} className="text-amber-400 animate-spin" />
+              <p className="text-xs text-slate-300 font-medium">Drafting visual prompts with AI Agent...</p>
             </div>
           )}
 
-          {/* Storyboard Result Cards */}
+          {/* Storyboard Result Display */}
           {storyboard && !loading && (
             <div className="space-y-4">
               <div className="p-3 bg-slate-800/50 border border-slate-700/50 rounded-lg">
@@ -152,6 +154,7 @@ const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyr
                         {scene.aiVideoPrompt}
                       </code>
                       <button
+                        type="button"
                         onClick={() => handleCopy(scene.aiVideoPrompt, idx)}
                         className="p-1.5 text-slate-400 hover:text-slate-100 bg-slate-800 rounded transition shrink-0 cursor-pointer"
                         title="Copy Prompt"
@@ -165,6 +168,7 @@ const StoryboardModal = ({ trackData, isOpen, onClose, apiBaseUrl = 'https://lyr
 
               <div className="flex justify-end pt-2">
                 <button
+                  type="button"
                   onClick={generateStoryboard}
                   className="text-xs text-amber-400 hover:text-amber-300 underline font-medium cursor-pointer"
                 >
