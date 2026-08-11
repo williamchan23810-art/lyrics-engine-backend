@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: lyrics-engine-api
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: APPSHEET_APP_ID
+        value: "8c478376-6cca-4f50-871b-03d4948fbd56"
+      - key: APPSHEET_APP_KEY
+        sync: false # Set in Render Dashboard settings
+      - key: NODE_ENV
+        value: "production"
