@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Production API base URL assigned by Render
-const API_BASE_URL = 'https://lyrics-engine-api.onrender.com';
+// Production API base URL provided by Render
+const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
 
 const App = () => {
   const [trackData, setTrackData] = useState(null);
