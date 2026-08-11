@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Production API base URL provided by Render
+// Production API Gateway on Render
 const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
 
 const App = () => {
@@ -17,7 +17,7 @@ const App = () => {
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to fetch track from API Gateway:", err);
+        console.error("Failed to connect to API Gateway:", err);
         setLoading(false);
       });
   }, []);
