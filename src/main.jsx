@@ -2,10 +2,8 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Production API base URL pointing to Render backend gateway
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://lyrics-engine-api.onrender.com' 
-  : '';
+// Production API base URL assigned by Render
+const API_BASE_URL = 'https://lyrics-engine-api.onrender.com';
 
 const App = () => {
   const [trackData, setTrackData] = useState(null);
@@ -19,7 +17,7 @@ const App = () => {
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to load track data:", err);
+        console.error("Failed to fetch track from API Gateway:", err);
         setLoading(false);
       });
   }, []);
@@ -27,7 +25,7 @@ const App = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-950 text-amber-400 font-sans font-medium">
-        Loading Lyrics-Engine Studio...
+        Connecting to Lyrics-Engine Gateway...
       </div>
     );
   }
