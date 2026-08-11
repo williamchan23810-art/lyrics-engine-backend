@@ -4,30 +4,22 @@ import cors from 'cors';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for your live GitHub Pages frontend and local dev environments
+// Universal CORS Middleware for GitHub Pages Client
 app.use(cors({
-  origin: [
-    'https://williamchan23810-art.github.io',
-    'http://localhost:5173',
-    'http://localhost:3000'
-  ],
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  origin: '*', // Allows requests from GitHub Pages and local environments
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// AppSheet Configuration Settings
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID || "8c478376-6cca-4f50-871b-03d4948fbd56";
 const APPSHEET_APP_KEY = process.env.APPSHEET_APP_KEY;
 
-// ==========================================
-// ROUTE 1: GET Track & Synchronized Lyrics
-// ==========================================
+// Route 1: Retrieve Track Data
 app.get('/api/track/:id', async (req, res) => {
   const { id } = req.params;
 
-  // Query AppSheet REST API v2 if the Application Access Key is present
   if (APPSHEET_APP_KEY) {
     try {
       const response = await fetch(`https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table 1/Action`, {
@@ -42,7 +34,6 @@ app.get('/api/track/:id', async (req, res) => {
           Selector: `Filter(Table 1, [_RowNumber] = "${id}")`
         })
       });
-
       const data = await response.json();
       if (data && data[0]) {
         const row = data[0];
@@ -55,11 +46,11 @@ app.get('/api/track/:id', async (req, res) => {
         });
       }
     } catch (e) {
-      console.error("AppSheet REST API Error:", e);
+      console.error("AppSheet API Fetch Error:", e);
     }
   }
 
-  // Fallback Payload: Ensures UI renders immediately even without an active key
+  // Guaranteed Active Payload Fallback
   res.json({
     trackId: id,
     title: "Karaoke & Songs Appreciation",
@@ -74,14 +65,12 @@ app.get('/api/track/:id', async (req, res) => {
   });
 });
 
-// ==========================================
-// ROUTE 2: AI Storyboard Prompt Generator
-// ==========================================
+// Route 2: AI Storyboard Prompt Endpoint
 app.post('/api/ai/storyboard', (req, res) => {
   const { title, artist, lyrics } = req.body;
   const lyricLines = lyrics ? lyrics.split('\n').filter(l => l.trim()) : [];
 
-  const storyboardPayload = {
+  res.json({
     title: title || "Untitled Track",
     conceptOverview: `A visual narrative depicting key themes in "${title || 'this track'}" by ${artist || 'Artist'}. Optimized for video generation.`,
     scenes: [
@@ -110,10 +99,7 @@ app.post('/api/ai/storyboard', (req, res) => {
         aiVideoPrompt: "Wide reflective horizon at dusk, subtle particle effects, cinematic finish --ar 16:9"
       }
     ]
-  };
-
-  res.json(storyboardPayload);
+  });
 });
 
-// Start Express Gateway
-app.listen(PORT, () => console.log(`Lyrics-Engine Gateway listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
