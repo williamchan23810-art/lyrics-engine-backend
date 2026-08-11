@@ -1,99 +1,129 @@
-import express from 'express';
-import { GoogleGenAI, Type } from '@google/genai';
+import React, { useState, useRef, useEffect } from 'react';
+import { Play, Pause, Volume2, SkipBack, SkipForward } from 'lucide-react';
 
-const app = express();
-app.use(express.json());
+const LyricsEnginePlayer = ({ trackData }) => {
+  const audioRef = useRef(null);
+  const lyricsContainerRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // Sync current time with active lyric line
+  useEffect(() => {
+    if (!trackData?.lyrics) return;
+    const index = trackData.lyrics.findIndex((line, i) => {
+      const nextLine = trackData.lyrics[i + 1];
+      return currentTime >= line.startTime && (!nextLine || currentTime < nextLine.startTime);
+    });
 
-const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID;
-const APPSHEET_KEY = process.env.APPSHEET_ACCESS_KEY;
-
-app.post('/webhook/lyrics-engine', async (req, res) => {
-  const { rowId, songTitle, artist } = req.body;
-
-  if (!rowId || !songTitle || !artist) {
-    return res.status(400).json({ error: 'Missing required parameters: rowId, songTitle, or artist.' });
-  }
-
-  // Acknowledge AppSheet immediately to prevent timeout
-  res.status(200).json({ status: 'Processing' });
-
-  try {
-    const prompt = `Analyze the song "${songTitle}" by "${artist}". Extract the music composer, lyricist, release year, origin backstory, song meaning, and generate an 8-frame Pixar 3D video storyboard sequence in 9:16 portrait ratio. Note: Users can search for full lyrics directly via Google Search.`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: "You are an expert musicologist and creative animation director. Return structured output adhering strictly to schema.",
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            music_composer: { type: Type.STRING },
-            lyricist: { type: Type.STRING },
-            release_year: { type: Type.INTEGER },
-            origin_story: { type: Type.STRING },
-            song_meaning: { type: Type.STRING },
-            frames: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  frame_number: { type: Type.INTEGER },
-                  script: { type: Type.STRING },
-                  pixar_prompt: { type: Type.STRING }
-                },
-                required: ["frame_number", "script", "pixar_prompt"]
-              }
-            }
-          },
-          required: ["music_composer", "lyricist", "origin_story", "song_meaning", "frames"]
+    if (index !== activeIndex) {
+      setActiveIndex(index);
+      if (lyricsContainerRef.current && index !== -1) {
+        const activeElement = lyricsContainerRef.current.children[index];
+        if (activeElement) {
+          activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       }
-    });
+    }
+  }, [currentTime, trackData, activeIndex]);
 
-    const parsed = JSON.parse(response.text);
+  const togglePlay = () => {
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
 
-    // Map payload back to AppSheet Table 1
-    const updatePayload = {
-      Action: "Edit",
-      Properties: { Locale: "en-US" },
-      Rows: [
-        {
-          "Row ID": rowId,
-          "Status": "Complete",
-          "Music Composer": parsed.music_composer,
-          "Lyricist": parsed.lyricist,
-          "Release Year": parsed.release_year,
-          "Origin Story": parsed.origin_story,
-          "Song Meaning": parsed.song_meaning,
-          "Frame 1": `[Script]: ${parsed.frames[0]?.script}\n\n[Pixar Prompt]: ${parsed.frames[0]?.pixar_prompt}`,
-          "Frame 2": `[Script]: ${parsed.frames[1]?.script}\n\n[Pixar Prompt]: ${parsed.frames[1]?.pixar_prompt}`,
-          "Frame 3": `[Script]: ${parsed.frames[2]?.script}\n\n[Pixar Prompt]: ${parsed.frames[2]?.pixar_prompt}`,
-          "Frame 4": `[Script]: ${parsed.frames[3]?.script}\n\n[Pixar Prompt]: ${parsed.frames[3]?.pixar_prompt}`,
-          "Frame 5": `[Script]: ${parsed.frames[4]?.script}\n\n[Pixar Prompt]: ${parsed.frames[4]?.pixar_prompt}`,
-          "Frame 6": `[Script]: ${parsed.frames[5]?.script}\n\n[Pixar Prompt]: ${parsed.frames[5]?.pixar_prompt}`,
-          "Frame 7": `[Script]: ${parsed.frames[6]?.script}\n\n[Pixar Prompt]: ${parsed.frames[6]?.pixar_prompt}`,
-          "Frame 8": `[Script]: ${parsed.frames[7]?.script}\n\n[Pixar Prompt]: ${parsed.frames[7]?.pixar_prompt}`
-        }
-      ]
-    };
+  const handleTimeUpdate = () => {
+    setCurrentTime(audioRef.current.currentTime);
+  };
 
-    await fetch(`https://api.appsheet.com/api/v2/apps/${APPSHEET_APP_ID}/tables/Table%201/Action`, {
-      method: 'POST',
-      headers: {
-        'ApplicationAccessKey': APPSHEET_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(updatePayload)
-    });
+  const handleSeek = (time) => {
+    audioRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
 
-  } catch (err) {
-    console.error('Webhook processing failed:', err);
-  }
-});
+  return (
+    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 font-sans">
+      {/* Top Navigation / Header */}
+      <header className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+        <div>
+          <h1 className="text-2xl font-bold text-amber-400">{trackData.title}</h1>
+          <p className="text-slate-400">{trackData.artist}</p>
+        </div>
+        <div className="text-xs px-3 py-1 bg-slate-800 rounded-full text-slate-300">
+          Lyrics-Engine Web v2.0
+        </div>
+      </header>
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Lyrics Engine running on port ${PORT}`));
+      {/* Synchronized Lyrics Container */}
+      <main className="flex-1 overflow-y-auto p-8 space-y-6 text-center" ref={lyricsContainerRef}>
+        {trackData.lyrics.map((line, idx) => (
+          <p
+            key={idx}
+            onClick={() => handleSeek(line.startTime)}
+            className={`cursor-pointer transition-all duration-300 text-xl md:text-2xl font-medium ${
+              idx === activeIndex
+                ? 'text-amber-400 scale-110 font-bold drop-shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {line.text}
+          </p>
+        ))}
+      </main>
+
+      {/* Player Bar */}
+      <footer className="p-6 border-t border-slate-800 bg-slate-900 flex flex-col gap-4">
+        <audio
+          ref={audioRef}
+          src={trackData.audioUrl}
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={() => setIsPlaying(false)}
+        />
+        
+        {/* Scrubber */}
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-slate-400">{formatTime(currentTime)}</span>
+          <input
+            type="range"
+            min="0"
+            max={audioRef.current?.duration || 100}
+            value={currentTime}
+            onChange={(e) => handleSeek(Number(e.target.value))}
+            className="w-full accent-amber-400 bg-slate-700 h-1.5 rounded-lg appearance-none cursor-pointer"
+          />
+          <span className="text-xs text-slate-400">
+            {formatTime(audioRef.current?.duration || 0)}
+          </span>
+        </div>
+
+        {/* Playback Controls */}
+        <div className="flex justify-center items-center gap-6">
+          <button className="text-slate-400 hover:text-white transition">
+            <SkipBack size={24} />
+          </button>
+          <button
+            onClick={togglePlay}
+            className="p-4 bg-amber-400 text-slate-950 rounded-full hover:bg-amber-300 transition shadow-lg shadow-amber-400/20"
+          >
+            {isPlaying ? <Pause size={28} /> : <Play size={28} />}
+          </button>
+          <button className="text-slate-400 hover:text-white transition">
+            <SkipForward size={24} />
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+const formatTime = (secs) => {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+export default LyricsEnginePlayer;
