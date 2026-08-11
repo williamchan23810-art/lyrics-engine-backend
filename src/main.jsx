@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 
-// Exact Render service URL generated in your deployment dashboard
+// Target the correct active Render URL
 const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
 
 const App = () => {
@@ -20,7 +20,7 @@ const App = () => {
         setLoading(false);
       })
       .catch((err) => {
-        console.warn("API Gateway fetch warning, loading local fallback:", err);
+        console.warn("API Gateway fetch error, applying fallback state:", err);
         setTrackData({
           trackId: "1",
           title: "Karaoke & Songs Appreciation",
