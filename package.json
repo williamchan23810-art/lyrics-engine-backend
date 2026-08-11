@@ -1,23 +1,15 @@
 {
   "name": "lyrics-engine-backend",
-  "private": true,
-  "version": "2.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "server.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'No build step required for server'"
   },
   "dependencies": {
+    "@google/genai": "^0.1.1",
     "cors": "^2.8.5",
-    "express": "^4.18.2",
-    "lucide-react": "^0.263.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.0.0",
-    "vite": "^4.3.9"
+    "express": "^4.19.2"
   }
 }
