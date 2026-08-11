@@ -1,23 +1,21 @@
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "StoryboardData",
-  "type": "object",
-  "properties": {
-    "title": { "type": "string" },
-    "conceptOverview": { "type": "string" },
-    "scenes": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "sceneNumber": { "type": "integer" },
-          "lyricSegment": { "type": "string" },
-          "visualDescription": { "type": "string" },
-          "aiVideoPrompt": { "type": "string" }
-        },
-        "required": ["sceneNumber", "lyricSegment", "visualDescription", "aiVideoPrompt"]
-      }
-    }
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  base: '/lyrics-engine-backend/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    emptyOutDir: true,
   },
-  "required": ["title", "conceptOverview", "scenes"]
-}
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+    },
+  },
+});
