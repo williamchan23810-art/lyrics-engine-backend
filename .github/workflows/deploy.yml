@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-# Set permissions for GITHUB_TOKEN to deploy to GitHub Pages
+# Explicit permissions required for GitHub Pages deployment
 permissions:
   contents: read
   pages: write
