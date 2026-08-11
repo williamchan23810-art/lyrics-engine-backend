@@ -4,7 +4,8 @@ import { GoogleGenAI, Type } from '@google/genai';
 const app = express();
 app.use(express.json());
 
-const ai = new GoogleGenAI(); // Consumes GEMINI_API_KEY from environment variables
+// Explicitly pass apiKey options object to satisfy constructor initialization
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const APPSHEET_APP_ID = process.env.APPSHEET_APP_ID;
 const APPSHEET_KEY = process.env.APPSHEET_ACCESS_KEY;
@@ -16,7 +17,7 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
     return res.status(400).json({ error: 'Missing required payload parameters.' });
   }
 
-  // Acknowledge webhook immediately to prevent AppSheet execution timeout
+  // Acknowledge webhook immediately to prevent execution timeout in AppSheet
   res.status(200).json({ status: 'Processing' });
 
   try {
@@ -56,7 +57,7 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
 
     const parsed = JSON.parse(response.text);
 
-    // Map payload back to AppSheet Database Table 1
+    // Map payload back to AppSheet Table 1
     const updatePayload = {
       Action: "Edit",
       Properties: { Locale: "en-US" },
@@ -98,4 +99,4 @@ app.post('/webhook/lyrics-engine', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Lyrics Engine running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Lyrics Engine middleman running on port ${PORT}`));
