@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { Play, Pause, Type, Video } from 'lucide-react';
+import StoryboardModal from './StoryboardModal';
 
 const LyricsEnginePlayer = ({ trackData }) => {
   const [fontFamily, setFontFamily] = useState('font-sans');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [isStoryboardOpen, setIsStoryboardOpen] = useState(false);
   const audioRef = useRef(null);
 
   const togglePlay = () => {
@@ -25,17 +27,27 @@ const LyricsEnginePlayer = ({ trackData }) => {
           <p className="text-xs text-slate-400">{trackData?.artist || "Unknown Artist"}</p>
         </div>
 
-        {/* Font Switcher (Sans vs Cambria) */}
-        <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg text-xs">
-          <Type size={14} className="text-slate-400" />
-          <select 
-            value={fontFamily} 
-            onChange={(e) => setFontFamily(e.target.value)}
-            className="bg-transparent text-slate-200 outline-none cursor-pointer"
+        {/* Toolbar: Font Switcher & Storyboard Trigger */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg text-xs">
+            <Type size={14} className="text-slate-400" />
+            <select 
+              value={fontFamily} 
+              onChange={(e) => setFontFamily(e.target.value)}
+              className="bg-transparent text-slate-200 outline-none cursor-pointer"
+            >
+              <option value="font-sans" className="bg-slate-900">Sans-Serif</option>
+              <option value="font-[Cambria]" className="bg-slate-900">Cambria (Serif)</option>
+            </select>
+          </div>
+
+          <button 
+            onClick={() => setIsStoryboardOpen(true)}
+            className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-semibold transition shadow-sm shadow-amber-400/20"
           >
-            <option value="font-sans" className="bg-slate-900">Sans-Serif</option>
-            <option value="font-[Cambria]" className="bg-slate-900">Cambria (Serif)</option>
-          </select>
+            <Video size={14} />
+            AI Storyboard
+          </button>
         </div>
       </header>
 
@@ -66,6 +78,13 @@ const LyricsEnginePlayer = ({ trackData }) => {
           {isPlaying ? <Pause size={20} /> : <Play size={20} />}
         </button>
       </footer>
+
+      {/* AI Storyboard Modal Component */}
+      <StoryboardModal 
+        trackData={trackData} 
+        isOpen={isStoryboardOpen} 
+        onClose={() => setIsStoryboardOpen(false)} 
+      />
     </div>
   );
 };
