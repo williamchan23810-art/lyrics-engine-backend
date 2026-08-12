@@ -15,11 +15,7 @@ export async function handler(event) {
   }
 
   if (event.httpMethod !== 'POST') {
-    return { 
-      statusCode: 405, 
-      headers, 
-      body: JSON.stringify({ error: 'Method Not Allowed' }) 
-    };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   try {
@@ -80,7 +76,6 @@ Return ONLY a valid JSON object matching this schema:
       };
     }
 
-    // Fallback Payload
     return {
       statusCode: 200,
       headers,
@@ -111,7 +106,7 @@ Return ONLY a valid JSON object matching this schema:
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Failed to process track via Netlify Function.' })
+      body: JSON.stringify({ error: 'Failed to process request.' })
     };
   }
 }
