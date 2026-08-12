@@ -196,23 +196,20 @@ app.post('/api/ai/auto-song-generator', async (req, res) => {
     return res.status(400).json({ error: "Both Song Name and Artist Name are required." });
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn("⚠️ WARNING: GEMINI_API_KEY is not defined in Render Environment Variables!");
-  } else {
+  if (process.env.GEMINI_API_KEY) {
     try {
       const model = genAI.getGenerativeModel({ 
         model: 'gemini-1.5-flash',
         generationConfig: { responseMimeType: "application/json" }
       });
 
-      const prompt = `You are an expert Audio Engineer and Video Storyboard Director.
-Target Track:
-- Song Name: "${title}"
-- Artist Name: "${artist}"
+      const prompt = `You are an expert Audio Engineer and AI Cinematographer.
+Target Song: "${title}" by "${artist}"
 
 Task:
-1. Provide the complete real lyrics for this song formatted into a timestamped JSON array spaced naturally by vocal phrasing (in seconds).
-2. Create a 4-scene video storyboard with cinematic text-to-video prompts for YouTube Shorts.
+1. Provide a timestamped sequence (spaced by 5-8 seconds) representing key song lines, thematic vocal summaries, and chorus cues for synchronized display.
+2. Direct the user to search Google for the complete, licensed verbatim lyrics.
+3. Generate a 4-scene video storyboard with cinematic text-to-video prompts for YouTube Shorts.
 
 Return ONLY a valid JSON object matching this schema:
 {
@@ -220,17 +217,18 @@ Return ONLY a valid JSON object matching this schema:
   "artist": "${artist}",
   "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
   "lyrics": [
-    { "startTime": 0, "text": "First vocal line..." },
-    { "startTime": 5, "text": "Second vocal line..." }
+    { "startTime": 0, "text": "Verse 1: Visual interpretation of ${title}" },
+    { "startTime": 8, "text": "Chorus: Key musical and vocal highlight" },
+    { "startTime": 16, "text": "Note: Search Google for official full song lyrics" }
   ],
   "storyboard": {
-    "conceptOverview": "2-sentence visual overview",
+    "conceptOverview": "A 2-sentence creative visual overview capturing the mood of ${title} by ${artist}.",
     "scenes": [
       {
         "sceneNumber": 1,
-        "lyricSegment": "Target lyric snippet",
-        "visualDescription": "Detailed shot description and lighting mood",
-        "aiVideoPrompt": "Cinematic text-to-video generation prompt ending with --ar 16:9"
+        "lyricSegment": "${title} Opening Theme",
+        "visualDescription": "Cinematic shot establishing tone and atmospheric lighting.",
+        "aiVideoPrompt": "Cinematic wide shot, dramatic moody lighting, photorealistic 8k --ar 16:9"
       }
     ]
   }
@@ -240,7 +238,7 @@ Return ONLY a valid JSON object matching this schema:
       const generatedData = JSON.parse(result.response.text());
       return res.json(generatedData);
     } catch (err) {
-      console.error("❌ Gemini Auto-Grab Execution Error:", err.message || err);
+      console.error("Gemini Auto-Grab Error:", err);
     }
   }
 
@@ -250,9 +248,9 @@ Return ONLY a valid JSON object matching this schema:
     artist: artist,
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
     lyrics: [
-      { startTime: 0, text: `Auto-generated lyrics for ${title}` },
-      { startTime: 5, text: `Performed by ${artist}` },
-      { startTime: 10, text: "Synchronized audio playback active" }
+      { startTime: 0, text: `Thematic Overview for ${title}` },
+      { startTime: 6, text: `Originally performed by ${artist}` },
+      { startTime: 12, text: "Search online for official full lyrics" }
     ],
     storyboard: {
       conceptOverview: `A visual narrative depicting key themes in "${title}" by ${artist}.`,
