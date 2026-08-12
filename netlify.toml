@@ -3,7 +3,7 @@
   publish = "dist"
   functions = "netlify/functions"
 
-# Redirects client API calls directly to Netlify serverless functions
+# Serverless function proxy rewrites
 [[redirects]]
   from = "/api/auto-song-generator"
   to = "/.netlify/functions/auto-song-generator"
@@ -19,7 +19,7 @@
   to = "/.netlify/functions/storyboard"
   status = 200
 
-# Single Page Application SPA fallback
+# SPA fallback router
 [[redirects]]
   from = "/*"
   to = "/index.html"
