@@ -80,6 +80,7 @@ Return ONLY a valid JSON object matching this schema:
       };
     }
 
+    // Fallback Payload
     return {
       statusCode: 200,
       headers,
@@ -106,11 +107,11 @@ Return ONLY a valid JSON object matching this schema:
       })
     };
   } catch (err) {
-    console.error('Netlify Function Error:', err);
+    console.error('Netlify Function Execution Error:', err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Failed to process request.' })
+      body: JSON.stringify({ error: 'Failed to process track via Netlify Function.' })
     };
   }
 }
