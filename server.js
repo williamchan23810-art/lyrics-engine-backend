@@ -196,7 +196,9 @@ app.post('/api/ai/auto-song-generator', async (req, res) => {
     return res.status(400).json({ error: "Both Song Name and Artist Name are required." });
   }
 
-  if (process.env.GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("⚠️ WARNING: GEMINI_API_KEY is not defined in Render Environment Variables!");
+  } else {
     try {
       const model = genAI.getGenerativeModel({ 
         model: 'gemini-1.5-flash',
@@ -208,28 +210,27 @@ Target Track:
 - Song Name: "${title}"
 - Artist Name: "${artist}"
 
-Tasks:
-1. Retrieve or generate the complete lyrics for this song.
-2. Format the lyrics into a timestamped JSON array of lines spaced naturally by vocal phrasing (in seconds).
-3. Generate a 4-scene video storyboard with cinematic text-to-video prompts optimized for YouTube Shorts/Reels.
+Task:
+1. Provide the complete real lyrics for this song formatted into a timestamped JSON array spaced naturally by vocal phrasing (in seconds).
+2. Create a 4-scene video storyboard with cinematic text-to-video prompts for YouTube Shorts.
 
-Return ONLY a valid JSON object matching this exact schema:
+Return ONLY a valid JSON object matching this schema:
 {
   "title": "${title}",
   "artist": "${artist}",
   "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
   "lyrics": [
-    { "startTime": 0, "text": "First lyric line..." },
-    { "startTime": 5, "text": "Second lyric line..." }
+    { "startTime": 0, "text": "First vocal line..." },
+    { "startTime": 5, "text": "Second vocal line..." }
   ],
   "storyboard": {
-    "conceptOverview": "2-sentence creative visual overview of the video concept.",
+    "conceptOverview": "2-sentence visual overview",
     "scenes": [
       {
         "sceneNumber": 1,
-        "lyricSegment": "Exact lyric line",
+        "lyricSegment": "Target lyric snippet",
         "visualDescription": "Detailed shot description and lighting mood",
-        "aiVideoPrompt": "Cinematic text-to-video prompt ending with --ar 16:9"
+        "aiVideoPrompt": "Cinematic text-to-video generation prompt ending with --ar 16:9"
       }
     ]
   }
@@ -239,7 +240,7 @@ Return ONLY a valid JSON object matching this exact schema:
       const generatedData = JSON.parse(result.response.text());
       return res.json(generatedData);
     } catch (err) {
-      console.error("Auto Grabber Error:", err);
+      console.error("❌ Gemini Auto-Grab Execution Error:", err.message || err);
     }
   }
 
