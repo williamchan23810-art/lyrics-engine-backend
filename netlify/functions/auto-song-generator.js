@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function handler(event) {
+  // Standard CORS headers for client-side API requests
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -10,12 +11,18 @@ export async function handler(event) {
     'Content-Type': 'application/json'
   };
 
+  // Handle preflight OPTIONS request
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
 
+  // Restrict endpoint to POST method only
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return { 
+      statusCode: 405, 
+      headers, 
+      body: JSON.stringify({ error: 'Method Not Allowed' }) 
+    };
   }
 
   try {
@@ -29,6 +36,7 @@ export async function handler(event) {
       };
     }
 
+    // Execute live Gemini 1.5 Flash request if API key is present
     if (process.env.GEMINI_API_KEY) {
       const model = genAI.getGenerativeModel({
         model: 'gemini-1.5-flash',
@@ -76,6 +84,7 @@ Return ONLY a valid JSON object matching this schema:
       };
     }
 
+    // Static Fallback Payload if API key is unpopulated
     return {
       statusCode: 200,
       headers,
@@ -106,7 +115,7 @@ Return ONLY a valid JSON object matching this schema:
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Failed to process request.' })
+      body: JSON.stringify({ error: 'Failed to process track via Netlify Function.' })
     };
   }
 }
