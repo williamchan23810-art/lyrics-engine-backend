@@ -5,7 +5,6 @@ export default defineConfig({
   plugins: [react()],
   base: '/lyrics-engine-backend/',
   build: {
-    outDir: 'dist',
-    emptyOutDir: true
+    outDir: 'dist'
   }
 });
