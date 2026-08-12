@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
-import './index.css';
 
 const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
 
