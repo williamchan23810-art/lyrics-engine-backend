@@ -2,8 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-export async function handler(event, context) {
-  // CORS Headers
+export async function handler(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -16,7 +15,11 @@ export async function handler(event, context) {
   }
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return { 
+      statusCode: 405, 
+      headers, 
+      body: JSON.stringify({ error: 'Method Not Allowed' }) 
+    };
   }
 
   try {
@@ -40,7 +43,7 @@ export async function handler(event, context) {
 Target Song: "${title}" by "${artist}"
 
 Task:
-1. Provide a timestamped sequence (spaced by 5-8 seconds) representing key song lines, thematic vocal summaries, and chorus cues for synchronized display.
+1. Provide a timestamped sequence (spaced by 5-8 seconds) representing key song lines, thematic vocal summaries, and chorus cues.
 2. Direct the user to search online for complete verbatim lyrics.
 3. Generate a 4-scene video storyboard with cinematic text-to-video prompts for YouTube Shorts.
 
@@ -77,7 +80,6 @@ Return ONLY a valid JSON object matching this schema:
       };
     }
 
-    // Fallback Payload
     return {
       statusCode: 200,
       headers,
