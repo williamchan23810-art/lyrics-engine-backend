@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Film, Edit3, Type, Music, BookOpen, Check, Sparkles } from 'lucide-react';
+import { Play, Pause, Film, Edit3, Type, Music, BookOpen, Check, Sparkles, Upload } from 'lucide-react';
 import StoryboardModal from './StoryboardModal';
 import LyricsEditorModal from './LyricsEditorModal';
 import AutoGeneratorModal from './AutoGeneratorModal';
@@ -21,6 +21,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
 
   const audioRef = useRef(null);
   const activeLyricRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (initialTrackData) {
@@ -47,6 +48,28 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
+    }
+  };
+
+  // Interactive Seek Bar Handler
+  const handleSeek = (e) => {
+    const newTime = parseFloat(e.target.value);
+    setCurrentTime(newTime);
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime;
+    }
+  };
+
+  // Local MP3 File Upload Handler
+  const handleAudioFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const customAudioUrl = URL.createObjectURL(file);
+      setTrackData((prev) => ({
+        ...prev,
+        audioUrl: customAudioUrl
+      }));
+      setIsPlaying(false);
     }
   };
 
@@ -126,13 +149,29 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
 
         {/* Control Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Main Auto-Grab Trigger */}
           <button
             onClick={() => setIsAutoGrabOpen(true)}
-            className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-lg shadow-amber-400/20 active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-3.5 py-1.5 rounded-lg text-xs font-bold transition shadow-lg shadow-amber-400/20 cursor-pointer"
           >
             <Sparkles size={15} />
             <span>Start Auto-Grab</span>
+          </button>
+
+          {/* Local MP3 Loader */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleAudioFileUpload}
+            accept="audio/*"
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            title="Upload local MP3 for live playback"
+          >
+            <Upload size={14} className="text-amber-400" />
+            <span>Load MP3</span>
           </button>
 
           {/* Typography Selector */}
@@ -148,7 +187,6 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
             </select>
           </div>
 
-          {/* Edit Lyrics Trigger */}
           <button
             onClick={() => setIsEditorOpen(true)}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
@@ -157,7 +195,6 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
             <span>Edit Lyrics</span>
           </button>
 
-          {/* AI Storyboard Trigger */}
           <button
             onClick={() => setIsStoryboardOpen(true)}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
@@ -166,11 +203,9 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
             <span>AI Storyboard</span>
           </button>
 
-          {/* Export Notebook Trigger */}
           <button
             onClick={handleExportToNotebook}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
-            title="Copy structured Markdown to clipboard for NotebookLM"
           >
             {copiedNotebook ? <Check size={14} className="text-emerald-400" /> : <BookOpen size={14} className="text-amber-400" />}
             <span>{copiedNotebook ? 'Copied!' : 'Export Notebook'}</span>
@@ -214,7 +249,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
       </main>
 
       {/* Audio Player Footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 p-4">
+      <footer className="bg-slate-900 border-t border-slate-800 p-4 space-y-3">
         <audio
           ref={audioRef}
           src={trackData?.audioUrl || "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"}
@@ -223,25 +258,38 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
           onEnded={() => setIsPlaying(false)}
         />
 
-        <div className="max-w-xl mx-auto flex items-center justify-between gap-4">
+        {/* Custom Progress / Seek Slider */}
+        <div className="max-w-2xl mx-auto flex items-center gap-3">
           <span className="text-xs font-mono text-slate-400 w-10 text-right">
             {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')}
           </span>
 
+          <input
+            type="range"
+            min="0"
+            max={duration || 100}
+            value={currentTime}
+            onChange={handleSeek}
+            className="w-full h-1.5 bg-slate-800 accent-amber-400 rounded-lg cursor-pointer focus:outline-none"
+          />
+
+          <span className="text-xs font-mono text-slate-400 w-10">
+            {Math.floor(duration / 60)}:{Math.floor(duration % 60).toString().padStart(2, '0')}
+          </span>
+        </div>
+
+        {/* Play Controls */}
+        <div className="flex items-center justify-center">
           <button
             onClick={togglePlayPause}
             className="p-3 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-full transition shadow-lg shadow-amber-400/20 active:scale-95 cursor-pointer"
           >
             {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
           </button>
-
-          <span className="text-xs font-mono text-slate-400 w-10">
-            {Math.floor(duration / 60)}:{Math.floor(duration % 60).toString().padStart(2, '0')}
-          </span>
         </div>
       </footer>
 
-      {/* AI Auto-Grab Modal */}
+      {/* Modals */}
       <AutoGeneratorModal
         isOpen={isAutoGrabOpen}
         onClose={() => setIsAutoGrabOpen(false)}
@@ -249,7 +297,6 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
         apiBaseUrl={apiBaseUrl}
       />
 
-      {/* AI Storyboard Modal */}
       <StoryboardModal
         trackData={trackData}
         isOpen={isStoryboardOpen}
@@ -258,7 +305,6 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = 'https:/
         apiBaseUrl={apiBaseUrl}
       />
 
-      {/* AI Lyrics Editor Modal */}
       <LyricsEditorModal
         trackData={trackData}
         isOpen={isEditorOpen}
