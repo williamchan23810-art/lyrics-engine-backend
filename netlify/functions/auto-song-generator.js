@@ -1,9 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 export async function handler(event) {
-  // Standard CORS headers for client-side API requests
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -11,111 +8,75 @@ export async function handler(event) {
     'Content-Type': 'application/json'
   };
 
-  // Handle preflight OPTIONS request
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
 
-  // Restrict endpoint to POST method only
-  if (event.httpMethod !== 'POST') {
-    return { 
-      statusCode: 405, 
-      headers, 
-      body: JSON.stringify({ error: 'Method Not Allowed' }) 
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  // Diagnostic Check: If Key is Missing Entirely
+  if (!apiKey) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'DIAGNOSTIC_FAILURE: GEMINI_API_KEY is not defined in Netlify process.env' 
+      })
     };
   }
 
   try {
     const { title, artist } = JSON.parse(event.body || '{}');
 
-    if (!title || !artist) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Both Song Name and Artist Name are required.' })
-      };
-    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' }
+    });
 
-    // Execute live Gemini 1.5 Flash request if API key is present
-    if (process.env.GEMINI_API_KEY) {
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: { responseMimeType: 'application/json' }
-      });
-
-      const prompt = `You are an expert Audio Engineer and AI Cinematographer.
-Target Song: "${title}" by "${artist}"
-
-Task:
-1. Provide a timestamped sequence (spaced by 5-8 seconds) representing key song lines, thematic vocal summaries, and chorus cues.
-2. Direct the user to search online for complete verbatim lyrics.
-3. Generate a 4-scene video storyboard with cinematic text-to-video prompts for YouTube Shorts.
-
-Return ONLY a valid JSON object matching this schema:
+    const prompt = `You are an expert Audio Engineer. Generate structured JSON for song "${title}" by "${artist}".
+Return JSON schema:
 {
   "title": "${title}",
   "artist": "${artist}",
   "audioUrl": null,
   "lyrics": [
-    { "startTime": 0, "text": "Verse 1: Visual interpretation of ${title}" },
-    { "startTime": 8, "text": "Chorus: Key musical and vocal highlight" },
-    { "startTime": 16, "text": "Note: Search online for official full lyrics" }
+    { "startTime": 0, "text": "Thematic highlight for ${title}" },
+    { "startTime": 8, "text": "Key chorus cue" }
   ],
   "storyboard": {
-    "conceptOverview": "A 2-sentence creative visual overview capturing the mood of ${title} by ${artist}.",
+    "conceptOverview": "Visual summary for ${title}",
     "scenes": [
       {
         "sceneNumber": 1,
-        "lyricSegment": "${title} Opening Theme",
-        "visualDescription": "Cinematic shot establishing tone.",
-        "aiVideoPrompt": "Cinematic wide shot, dramatic moody lighting, photorealistic 8k --ar 16:9"
+        "lyricSegment": "${title}",
+        "visualDescription": "Cinematic shot",
+        "aiVideoPrompt": "Cinematic lighting --ar 16:9"
       }
     ]
   }
 }`;
 
-      const result = await model.generateContent(prompt);
-      const generatedData = JSON.parse(result.response.text());
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const data = JSON.parse(text);
 
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify(generatedData)
-      };
-    }
-
-    // Static Fallback Payload if API key is unpopulated
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({
-        title,
-        artist,
-        audioUrl: null,
-        lyrics: [
-          { startTime: 0, text: `Thematic Overview for ${title}` },
-          { startTime: 6, text: `Originally performed by ${artist}` },
-          { startTime: 12, text: 'Search online for official full lyrics' }
-        ],
-        storyboard: {
-          conceptOverview: `A visual narrative depicting key themes in "${title}" by ${artist}.`,
-          scenes: [
-            {
-              sceneNumber: 1,
-              lyricSegment: title,
-              visualDescription: 'Atmospheric opening shot establishing tone.',
-              aiVideoPrompt: 'Cinematic wide shot, dramatic lighting, photorealistic 8k --ar 16:9'
-            }
-          ]
-        }
-      })
+      body: JSON.stringify(data)
     };
   } catch (err) {
-    console.error('Netlify Function Execution Error:', err);
+    // Expose exact API/Runtime error string directly to frontend for debugging
+    console.error('LIVE_GEMINI_ERROR:', err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Failed to process track via Netlify Function.' })
+      body: JSON.stringify({ 
+        error: 'GEMINI_RUNTIME_EXCEPTION',
+        message: err.message || String(err),
+        stack: err.stack || null
+      })
     };
   }
 }
