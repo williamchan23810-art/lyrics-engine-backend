@@ -215,7 +215,7 @@ Return ONLY a valid JSON object matching this schema:
 {
   "title": "${title}",
   "artist": "${artist}",
-  "audioUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+  "audioUrl": null,
   "lyrics": [
     { "startTime": 0, "text": "Verse 1: Visual interpretation of ${title}" },
     { "startTime": 8, "text": "Chorus: Key musical and vocal highlight" },
@@ -238,15 +238,15 @@ Return ONLY a valid JSON object matching this schema:
       const generatedData = JSON.parse(result.response.text());
       return res.json(generatedData);
     } catch (err) {
-      console.error("Gemini Auto-Grab Error:", err);
+      console.error("Gemini Auto-Grab Execution Error:", err);
     }
   }
 
-  // Fallback Payload
+  // Fallback Payload (audioUrl set to null so no demo music plays)
   res.json({
     title: title,
     artist: artist,
-    audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    audioUrl: null,
     lyrics: [
       { startTime: 0, text: `Thematic Overview for ${title}` },
       { startTime: 6, text: `Originally performed by ${artist}` },
@@ -265,5 +265,4 @@ Return ONLY a valid JSON object matching this schema:
     }
   });
 });
-
 app.listen(PORT, () => console.log(`Server active on port ${PORT}`));
