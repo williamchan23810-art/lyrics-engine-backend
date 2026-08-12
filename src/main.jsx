@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import LyricsEnginePlayer from './LyricsEnginePlayer';
 import './index.css';
 
+const API_BASE_URL = 'https://lyrics-engine-backend-1.onrender.com';
+
 const initialTrack = {
   trackId: "default-01",
   title: "Karaoke & Songs Appreciation",
@@ -15,7 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <LyricsEnginePlayer 
       trackData={initialTrack} 
-      apiBaseUrl="https://lyrics-engine-backend-1.onrender.com" 
+      apiBaseUrl={API_BASE_URL} 
     />
   </React.StrictMode>
 );
