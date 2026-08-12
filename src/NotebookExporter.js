@@ -1,5 +1,5 @@
 /**
- * Utility to format track lyrics, metadata, and AI Storyboard data 
+ * Formats track lyrics, metadata, and AI Storyboard data 
  * into clean, structured Markdown for easy notebook archiving.
  */
 
