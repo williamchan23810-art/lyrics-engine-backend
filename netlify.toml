@@ -1,3 +1,4 @@
+# netlify.toml
 [build]
   command = "npm run build"
   publish = "dist"
@@ -7,16 +8,6 @@
 [[redirects]]
   from = "/api/grab-lyrics"
   to = "/.netlify/functions/grab-lyrics"
-  status = 200
-
-[[redirects]]
-  from = "/api/auto-song-generator"
-  to = "/.netlify/functions/auto-song-generator"
-  status = 200
-
-[[redirects]]
-  from = "/api/format-lyrics"
-  to = "/.netlify/functions/format-lyrics"
   status = 200
 
 [[redirects]]
