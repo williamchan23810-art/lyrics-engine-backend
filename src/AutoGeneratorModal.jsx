@@ -1,141 +1,53 @@
-import React, { useState } from 'react';
-import { Play, Sparkles, X, Loader2, AlertCircle } from 'lucide-react';
+// src/AutoGeneratorModal.jsx
+const handleStartGrabbing = async (e) => {
+  e.preventDefault();
+  if (!songTitle.trim() || !artistName.trim()) {
+    setError("Please fill out both Song Name and Artist Name.");
+    return;
+  }
 
-const AutoGeneratorModal = ({ 
-  isOpen, 
-  onClose, 
-  onSongGenerated, 
-  apiBaseUrl = '' 
-}) => {
-  const [songTitle, setSongTitle] = useState('');
-  const [artistName, setArtistName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  setLoading(true);
+  setError(null);
 
-  if (!isOpen) return null;
+  try {
+    const response = await fetch('/.netlify/functions/grab-lyrics', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        title: songTitle.trim(),
+        artist: artistName.trim(),
+        songName: songTitle.trim(),
+        artistName: artistName.trim()
+      })
+    });
 
-  const handleStartGrabbing = async (e) => {
-    e.preventDefault();
-    if (!songTitle.trim() || !artistName.trim()) {
-      setError("Please fill out both Song Name and Artist Name.");
-      return;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server responded with HTTP ${response.status}`);
     }
 
-    setLoading(true);
-    setError(null);
+    const data = await response.json();
 
-    try {
-      // Determine primary and fallback endpoints
-      const targetEndpoint = apiBaseUrl 
-        ? `${apiBaseUrl.replace(/\/$/, '')}/grab-lyrics` 
-        : '/.netlify/functions/grab-lyrics';
+    if (!data.lines || data.lines.length === 0) {
+      throw new Error("No lyrics found for this song. Please try another track.");
+    }
 
-      let response = await fetch(targetEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title: songTitle.trim(), 
-          artist: artistName.trim(),
-          songName: songTitle.trim(),
-          artistName: artistName.trim()
-        })
-      });
+    if (onSongGenerated) {
+      onSongGenerated(data);
+    }
 
-      // Secondary fallback if primary relative rewrite was used
-      if (!response.ok && targetEndpoint !== '/api/grab-lyrics') {
-        response = await fetch('/api/grab-lyrics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            title: songTitle.trim(), 
-            artist: artistName.trim() 
-          })
-        });
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
-      }
-
-      if (onSongGenerated) {
-        onSongGenerated(data);
-      }
-      
-      onClose();
-    } catch (err) {
-      console.error("Auto Grabber Failed:", err);
+    onClose();
+  } catch (err) {
+    console.error("Auto Grabber Error:", err);
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      setError("Network error: Serverless function unreachable. Check deployment status.");
+    } else {
       setError(err.message || "Unable to grab track data automatically. Please try again.");
-    } finally {
-      setLoading(false);
     }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-900/50">
-          <div className="flex items-center gap-2 text-amber-400 font-bold text-base">
-            <Sparkles size={18} />
-            <span>AI Track Data Grabber</span>
-          </div>
-          <button 
-            type="button"
-            onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-200 rounded-lg transition cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Input Form */}
-        <form onSubmit={handleStartGrabbing} className="p-6 space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300">1. Song Name</label>
-            <input
-              type="text"
-              value={songTitle}
-              onChange={(e) => setSongTitle(e.target.value)}
-              placeholder="e.g. Daniel, Hotel California, 海闊天空"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-amber-400/50"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-300">2. Artist Name</label>
-            <input
-              type="text"
-              value={artistName}
-              onChange={(e) => setArtistName(e.target.value)}
-              placeholder="e.g. Elton John, Eagles, Beyond"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-amber-400/50"
-            />
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg">
-              <AlertCircle size={14} />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 px-5 py-3 rounded-lg font-bold text-sm transition shadow-lg shadow-amber-400/10 cursor-pointer disabled:opacity-50"
-            >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} fill="currentColor" />}
-              {loading ? 'Grabbing Lyrics & Timelines...' : 'Start Auto-Grab'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  } finally {
+    setLoading(false);
+  }
 };
-
-export default AutoGeneratorModal;
