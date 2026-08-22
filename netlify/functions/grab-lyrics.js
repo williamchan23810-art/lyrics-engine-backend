@@ -1,7 +1,6 @@
 // netlify/functions/grab-lyrics.js
 
-exports.handler = async function (event, context) {
-  // 1. Enable CORS for local dev and live builds
+exports.handler = async function (event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -23,75 +22,87 @@ exports.handler = async function (event, context) {
 
   try {
     const payload = JSON.parse(event.body || '{}');
-    const title = payload.title?.trim();
-    const artist = payload.artist?.trim() || '';
-    const audioDurationMs = payload.audioDurationMs || 0;
+    const title = payload.songName || payload.title || '';
+    const artist = payload.artistName || payload.artist || '';
 
     if (!title) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Song title is required.' })
+        body: JSON.stringify({ error: 'Song name is required.' })
       };
     }
 
-    // 2. Query LRCLIB
-    const queryUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`;
+    // Step 1: Broad Search Query against LRCLIB
+    const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(`${title} ${artist}`.trim())}`;
     
-    const response = await fetch(queryUrl, {
+    const response = await fetch(searchUrl, {
       headers: {
-        'User-Agent': 'LyricsEngineStudio/1.0 (williamhchanstudio)'
+        'User-Agent': 'KaraokeLyricsStudio/1.0 (williamhchanstudio)'
       }
     });
 
     if (!response.ok) {
-      // If exact search fails, try general search endpoint as fallback
-      const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(`${title} ${artist}`)}`;
-      const searchRes = await fetch(searchUrl, {
-        headers: { 'User-Agent': 'LyricsEngineStudio/1.0 (williamhchanstudio)' }
-      });
-
-      if (searchRes.ok) {
-        const searchList = await searchRes.json();
-        const firstMatch = searchList.find((item) => item.syncedLyrics);
-        
-        if (firstMatch && firstMatch.syncedLyrics) {
-          const lines = parseLrc(firstMatch.syncedLyrics);
-          return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({
-              status: 'success',
-              trackId: `${title}-${artist || 'unknown'}`,
-              title: firstMatch.trackName || title,
-              artist: firstMatch.artistName || artist,
-              durationMs: firstMatch.duration ? Math.round(firstMatch.duration * 1000) : audioDurationMs,
-              lines
-            })
-          };
-        }
-      }
-
       return {
         statusCode: 404,
         headers,
-        body: JSON.stringify({ error: 'No synchronized lyrics found for this track.' })
+        body: JSON.stringify({ error: 'Failed to reach lyrics database.' })
       };
     }
 
-    const data = await response.json();
+    const searchResults = await response.json();
 
-    if (data.syncedLyrics) {
-      const lines = parseLrc(data.syncedLyrics);
+    if (!Array.isArray(searchResults) || searchResults.length === 0) {
+      return {
+        statusCode: 404,
+        headers,
+        body: JSON.stringify({ error: `No lyrics found for "${title}".` })
+      };
+    }
+
+    // Step 2: Pick the best result (prefer synced lyrics)
+    const bestMatch = searchResults.find(r => r.syncedLyrics) || searchResults[0];
+
+    if (bestMatch.syncedLyrics) {
+      const parsedLines = parseLrcToSchema(bestMatch.syncedLyrics);
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           status: 'success',
-          trackId: `${title}-${artist || 'unknown'}`,
-          title: data.trackName || title,
-          artist: data.artistName || artist,
-          durationMs: data.duration ? Math.round(data.duration * 1000) : audioDurationMs,
+          trackId: `${bestMatch.trackName}-${bestMatch.artistName}`,
+          title: bestMatch.trackName,
+          artist: bestMatch.artistName,
+          duration: bestMatch.duration || 0,
+          lines: parsedLines
+        })
+      };
+    }
+
+    // Step 3: Handle plain text lyrics if no sync available
+    if (bestMatch.plainLyrics) {
+      const lines = bestMatch.plainLyrics.split('\n').filter(Boolean).map((text, idx) => ({
+        lineIndex: idx,
+        startTimeMs: idx * 3000,
+        endTimeMs: (idx + 1) * 3000,
+        originalText: text,
+        tokens: text.split(' ').map((word, wIdx) => ({
+          char: word + ' ',
+          phonetic: '',
+          startMs: (idx * 3000) + (wIdx * 300),
+          endMs: (idx * 3000) + ((wIdx + 1) * 300)
+        }))
+      }));
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          status: 'success_unsynced',
+          trackId: `${bestMatch.trackName}-${bestMatch.artistName}`,
+          title: bestMatch.trackName,
+          artist: bestMatch.artistName,
+          duration: bestMatch.duration || 0,
           lines
         })
       };
@@ -100,22 +111,22 @@ exports.handler = async function (event, context) {
     return {
       statusCode: 404,
       headers,
-      body: JSON.stringify({ error: 'Synced lyrics unavailable for this track.' })
+      body: JSON.stringify({ error: 'Lyrics text not available for this song.' })
     };
 
   } catch (err) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: err.message || 'Internal Server Error' })
+      body: JSON.stringify({ error: err.message || 'Server error while grabbing lyrics.' })
     };
   }
 };
 
 /**
- * Parses raw LRC string into structured line & token schema
+ * Parses LRC lines into character / word tokens
  */
-function parseLrc(lrcText) {
+function parseLrcToSchema(lrcText) {
   const lines = lrcText.split('\n');
   const result = [];
   const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
@@ -135,28 +146,33 @@ function parseLrc(lrcText) {
 
     if (!text) continue;
 
-    // Distribute time across characters
-    const chars = Array.from(text);
-    const charSpan = 220; // default 220ms interpolation
-    const endTimeMs = startTimeMs + (chars.length * charSpan);
+    // Tokenize words/characters
+    const tokens = text.includes(' ')
+      ? text.split(' ').map((word, i) => ({
+          char: word + ' ',
+          phonetic: '',
+          startMs: startTimeMs + (i * 350),
+          endMs: startTimeMs + ((i + 1) * 350)
+        }))
+      : Array.from(text).map((char, i) => ({
+          char,
+          phonetic: '',
+          startMs: startTimeMs + (i * 220),
+          endMs: startTimeMs + ((i + 1) * 220)
+        }));
 
-    const tokens = chars.map((char, i) => ({
-      char,
-      phonetic: '',
-      startMs: startTimeMs + (i * charSpan),
-      endMs: startTimeMs + ((i + 1) * charSpan)
-    }));
+    const lineDuration = tokens.length > 0 ? (tokens[tokens.length - 1].endMs - startTimeMs) : 2000;
 
     result.push({
       lineIndex: lineCounter++,
       startTimeMs,
-      endTimeMs,
+      endTimeMs: startTimeMs + lineDuration,
       originalText: text,
       tokens
     });
   }
 
-  // Adjust line end times so they do not overlap next line's start
+  // Adjust line end times
   for (let i = 0; i < result.length - 1; i++) {
     if (result[i].endTimeMs > result[i + 1].startTimeMs) {
       result[i].endTimeMs = result[i + 1].startTimeMs;
