@@ -5,6 +5,11 @@
 
 # Serverless function proxy rewrites
 [[redirects]]
+  from = "/api/grab-lyrics"
+  to = "/.netlify/functions/grab-lyrics"
+  status = 200
+
+[[redirects]]
   from = "/api/auto-song-generator"
   to = "/.netlify/functions/auto-song-generator"
   status = 200
@@ -19,7 +24,7 @@
   to = "/.netlify/functions/storyboard"
   status = 200
 
-# SPA fallback router
+# SPA fallback router (must remain at the bottom)
 [[redirects]]
   from = "/*"
   to = "/index.html"
