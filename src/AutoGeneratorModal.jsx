@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Play, Sparkles, X, Loader2, AlertCircle } from 'lucide-react';
 
-const AutoGeneratorModal = ({ isOpen, onClose, onSongGenerated, apiBaseUrl = 'https://lyrics-engine-backend-1.onrender.com' }) => {
+const AutoGeneratorModal = ({ 
+  isOpen, 
+  onClose, 
+  onSongGenerated, 
+  apiBaseUrl = '' 
+}) => {
   const [songTitle, setSongTitle] = useState('');
   const [artistName, setArtistName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,22 +25,48 @@ const AutoGeneratorModal = ({ isOpen, onClose, onSongGenerated, apiBaseUrl = 'ht
     setError(null);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/ai/auto-song-generator`, {
+      // Determine primary and fallback endpoints
+      const targetEndpoint = apiBaseUrl 
+        ? `${apiBaseUrl.replace(/\/$/, '')}/grab-lyrics` 
+        : '/.netlify/functions/grab-lyrics';
+
+      let response = await fetch(targetEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: songTitle, artist: artistName })
+        body: JSON.stringify({ 
+          title: songTitle.trim(), 
+          artist: artistName.trim(),
+          songName: songTitle.trim(),
+          artistName: artistName.trim()
+        })
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      // Secondary fallback if primary relative rewrite was used
+      if (!response.ok && targetEndpoint !== '/api/grab-lyrics') {
+        response = await fetch('/api/grab-lyrics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            title: songTitle.trim(), 
+            artist: artistName.trim() 
+          })
+        });
+      }
+
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
 
       if (onSongGenerated) {
         onSongGenerated(data);
       }
+      
       onClose();
     } catch (err) {
       console.error("Auto Grabber Failed:", err);
-      setError("Unable to grab track data automatically. Please try again.");
+      setError(err.message || "Unable to grab track data automatically. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -68,7 +99,7 @@ const AutoGeneratorModal = ({ isOpen, onClose, onSongGenerated, apiBaseUrl = 'ht
               type="text"
               value={songTitle}
               onChange={(e) => setSongTitle(e.target.value)}
-              placeholder="e.g. Hotel California, Red Bean, REM"
+              placeholder="e.g. Daniel, Hotel California, 海闊天空"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-amber-400/50"
             />
           </div>
@@ -79,7 +110,7 @@ const AutoGeneratorModal = ({ isOpen, onClose, onSongGenerated, apiBaseUrl = 'ht
               type="text"
               value={artistName}
               onChange={(e) => setArtistName(e.target.value)}
-              placeholder="e.g. Eagles, Faye Wong, Alan Tam"
+              placeholder="e.g. Elton John, Eagles, Beyond"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-amber-400/50"
             />
           </div>
@@ -98,7 +129,7 @@ const AutoGeneratorModal = ({ isOpen, onClose, onSongGenerated, apiBaseUrl = 'ht
               className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 px-5 py-3 rounded-lg font-bold text-sm transition shadow-lg shadow-amber-400/10 cursor-pointer disabled:opacity-50"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} fill="currentColor" />}
-              {loading ? 'Grabbing Lyrics & Shorts Prompts...' : 'Start Auto-Grab'}
+              {loading ? 'Grabbing Lyrics & Timelines...' : 'Start Auto-Grab'}
             </button>
           </div>
         </form>
