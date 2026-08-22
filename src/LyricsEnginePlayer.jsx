@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Film, Edit3, Type, Music, BookOpen, Check, Sparkles, Upload } from 'lucide-react';
+// src/LyricsEnginePlayer.jsx
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Play, Pause, Film, Edit3, Type, Music, BookOpen, Check, Sparkles, RotateCcw } from 'lucide-react';
 import StoryboardModal from './StoryboardModal';
 import LyricsEditorModal from './LyricsEditorModal';
 import AutoGeneratorModal from './AutoGeneratorModal';
@@ -7,8 +8,7 @@ import { copyToNotebookClipboard } from './NotebookExporter';
 
 const LyricsEnginePlayer = ({ 
   trackData: initialTrackData, 
-  // Default to relative Netlify API route to eliminate external server failures
-  apiBaseUrl = '/api' 
+  apiBaseUrl = '' 
 }) => {
   const [trackData, setTrackData] = useState(initialTrackData);
   const [storyboardData, setStoryboardData] = useState(null);
@@ -23,9 +23,9 @@ const LyricsEnginePlayer = ({
   const [isAutoGrabOpen, setIsAutoGrabOpen] = useState(false);
   const [copiedNotebook, setCopiedNotebook] = useState(false);
 
-  const audioRef = useRef(null);
+  const scrollContainerRef = useRef(null);
   const activeLyricRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const virtualTimerRef = useRef(null);
 
   useEffect(() => {
     if (initialTrackData) {
@@ -33,56 +33,54 @@ const LyricsEnginePlayer = ({
     }
   }, [initialTrackData]);
 
+  // High-Precision Virtual Metronome Clock (Decoupled from local audio files)
   const togglePlayPause = () => {
-    if (!audioRef.current || !audioRef.current.src) return;
     if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(e => console.warn("Audio play blocked or missing source:", e));
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-    }
-  };
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration);
-    }
-  };
-
-  const handleSeek = (e) => {
-    const newTime = parseFloat(e.target.value);
-    setCurrentTime(newTime);
-    if (audioRef.current) {
-      audioRef.current.currentTime = newTime;
-    }
-  };
-
-  const handleAudioFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const customAudioUrl = URL.createObjectURL(file);
-      setTrackData((prev) => ({ 
-        ...prev, 
-        audioUrl: customAudioUrl,
-        title: prev?.title || file.name.replace(/\.[^/.]+$/, "")
-      }));
+      if (virtualTimerRef.current) {
+        clearInterval(virtualTimerRef.current);
+      }
       setIsPlaying(false);
-      setCurrentTime(0);
+    } else {
+      const tickRate = 50; // ms interval for smooth 20fps timeline scrub
+      virtualTimerRef.current = setInterval(() => {
+        setCurrentTime((prev) => {
+          const maxDur = duration || 240;
+          const next = prev + tickRate / 1000;
+          if (next >= maxDur) {
+            clearInterval(virtualTimerRef.current);
+            setIsPlaying(false);
+            return 0;
+          }
+          return next;
+        });
+      }, tickRate);
+      setIsPlaying(true);
     }
   };
 
-  // Synchronizer: Supports both second-based and millisecond-based schemas
-  const getCurrentLyricIndex = () => {
+  const handleResetTimeline = () => {
+    if (virtualTimerRef.current) clearInterval(virtualTimerRef.current);
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  // Virtual clock cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (virtualTimerRef.current) clearInterval(virtualTimerRef.current);
+    };
+  }, []);
+
+  const handleSeek = (timeInSec) => {
+    setCurrentTime(timeInSec);
+  };
+
+  // Synchronizer: Finds active lyric line index by timestamp
+  const getCurrentLyricIndex = useCallback(() => {
     if (!trackData?.lyrics || trackData.lyrics.length === 0) return -1;
     let index = -1;
     for (let i = 0; i < trackData.lyrics.length; i++) {
-      const lineStart = trackData.lyrics[i].startTime ?? (trackData.lyrics[i].startTimeMs / 1000);
+      const lineStart = trackData.lyrics[i].startTime;
       if (currentTime >= lineStart) {
         index = i;
       } else {
@@ -90,10 +88,11 @@ const LyricsEnginePlayer = ({
       }
     }
     return index;
-  };
+  }, [currentTime, trackData?.lyrics]);
 
   const currentLyricIdx = getCurrentLyricIndex();
 
+  // Auto-Center Active Lyric with smooth vertical scrolling
   useEffect(() => {
     if (activeLyricRef.current) {
       activeLyricRef.current.scrollIntoView({
@@ -107,19 +106,20 @@ const LyricsEnginePlayer = ({
     setTrackData((prev) => ({ ...prev, lyrics: newLyrics }));
   };
 
-  // Auto-Grab Hydration Pipeline: Normalizes serverless response into local player format
+  // Ingests Auto-Grabbed payload & normalizes schema for timeline & storyboard
   const handleSongAutoGenerated = (generatedData) => {
+    if (virtualTimerRef.current) clearInterval(virtualTimerRef.current);
+
     const rawLines = generatedData.lines || generatedData.lyrics || [];
 
     const normalizedLyrics = rawLines.map((line, idx) => {
-      // Normalize startTime to seconds for the HTML5 audio element
       const startTimeSec = typeof line.startTime === 'number' 
         ? line.startTime 
-        : (line.startTimeMs ? line.startTimeMs / 1000 : idx * 3);
+        : (line.startTimeMs ? line.startTimeMs / 1000 : idx * 3.5);
 
       const endTimeSec = typeof line.endTime === 'number' 
         ? line.endTime 
-        : (line.endTimeMs ? line.endTimeMs / 1000 : (idx + 1) * 3);
+        : (line.endTimeMs ? line.endTimeMs / 1000 : (idx + 1) * 3.5);
 
       return {
         lineIndex: idx,
@@ -130,13 +130,19 @@ const LyricsEnginePlayer = ({
       };
     });
 
-    setTrackData((prev) => ({
+    // Determine duration based on metadata or final lyric timestamp
+    let calculatedDuration = generatedData.duration || 0;
+    if (!calculatedDuration && normalizedLyrics.length > 0) {
+      calculatedDuration = normalizedLyrics[normalizedLyrics.length - 1].endTime + 5;
+    }
+
+    setDuration(calculatedDuration);
+    setTrackData({
       trackId: generatedData.trackId || Date.now().toString(),
-      title: generatedData.title || prev?.title || "Untitled Track",
-      artist: generatedData.artist || prev?.artist || "Unknown Artist",
-      audioUrl: generatedData.audioUrl || prev?.audioUrl || "",
+      title: generatedData.title || "Untitled Track",
+      artist: generatedData.artist || "Unknown Artist",
       lyrics: normalizedLyrics
-    }));
+    });
 
     if (generatedData.storyboard) {
       setStoryboardData(generatedData.storyboard);
@@ -157,10 +163,10 @@ const LyricsEnginePlayer = ({
   const fontClass = fontStyle === 'cambria' ? 'font-serif' : 'font-sans';
 
   return (
-    <div className={`min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between ${fontClass}`}>
+    <div className={`h-screen w-screen bg-slate-950 text-slate-100 flex flex-col justify-between overflow-hidden ${fontClass}`}>
       
-      {/* Header Bar */}
-      <header className="flex flex-wrap items-center justify-between p-4 bg-slate-900/80 border-b border-slate-800 backdrop-blur-md gap-3 z-10">
+      {/* Header Toolbar */}
+      <header className="flex flex-wrap items-center justify-between p-4 bg-slate-900/90 border-b border-slate-800 backdrop-blur-md gap-3 z-20">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-amber-400/10 rounded-lg text-amber-400">
             <Music size={22} />
@@ -175,7 +181,7 @@ const LyricsEnginePlayer = ({
           </div>
         </div>
 
-        {/* Control Toolbar */}
+        {/* Action Controls */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setIsAutoGrabOpen(true)}
@@ -185,19 +191,12 @@ const LyricsEnginePlayer = ({
             <span>Start Auto-Grab</span>
           </button>
 
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleAudioFileUpload}
-            accept="audio/*"
-            className="hidden"
-          />
           <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            onClick={() => setIsStoryboardOpen(true)}
+            className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer"
           >
-            <Upload size={14} className="text-amber-400" />
-            <span>Load MP3</span>
+            <Film size={15} />
+            <span>AI Storyboard & Prompts</span>
           </button>
 
           <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300">
@@ -221,14 +220,6 @@ const LyricsEnginePlayer = ({
           </button>
 
           <button
-            onClick={() => setIsStoryboardOpen(true)}
-            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
-          >
-            <Film size={14} className="text-amber-400" />
-            <span>AI Storyboard</span>
-          </button>
-
-          <button
             onClick={handleExportToNotebook}
             className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
           >
@@ -238,32 +229,37 @@ const LyricsEnginePlayer = ({
         </div>
       </header>
 
-      {/* Main Lyrics Display with Syllable & Ruby Support */}
-      <main className="flex-1 flex flex-col items-center justify-center p-6 text-center overflow-hidden relative">
+      {/* Main High-Contrast Scrollable Lyrics Stage */}
+      <main className="flex-1 flex flex-col items-center justify-center p-4 relative overflow-hidden">
         {!trackData?.lyrics || trackData.lyrics.length === 0 ? (
           <div className="flex flex-col items-center space-y-3 text-slate-500">
-            <Music size={40} className="stroke-1 opacity-50" />
-            <p className="text-sm">No lyrics loaded for this track.</p>
+            <Music size={48} className="stroke-1 opacity-40" />
+            <p className="text-sm">No lyrics loaded. Click "Start Auto-Grab" to fetch track metadata.</p>
           </div>
         ) : (
-          <div className="w-full max-w-3xl h-[52vh] overflow-y-auto space-y-6 py-24 no-scrollbar">
+          <div 
+            ref={scrollContainerRef}
+            className="w-full max-w-3xl h-[58vh] overflow-y-auto space-y-6 py-28 px-4 text-center scroll-smooth scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent"
+          >
             {trackData.lyrics.map((line, idx) => {
               const isActive = idx === currentLyricIdx;
               return (
                 <div
                   key={idx}
                   ref={isActive ? activeLyricRef : null}
-                  className={`transition-all duration-300 px-4 py-2 rounded-xl flex flex-wrap justify-center items-center gap-x-2 gap-y-1 ${
+                  onClick={() => handleSeek(line.startTime)}
+                  title={`Click to jump to ${(line.startTime).toFixed(1)}s`}
+                  className={`cursor-pointer transition-all duration-300 py-3 px-6 rounded-2xl flex flex-wrap justify-center items-center gap-x-2 gap-y-1 ${
                     isActive
-                      ? 'text-amber-400 scale-105 opacity-100 drop-shadow-[0_2px_12px_rgba(251,191,36,0.3)] bg-slate-900/40 border border-amber-400/20'
-                      : 'text-slate-500 opacity-40 hover:opacity-70'
+                      ? 'text-amber-400 scale-110 font-bold bg-slate-900/90 border border-amber-400/30 shadow-[0_0_25px_rgba(251,191,36,0.15)] opacity-100'
+                      : 'text-slate-300 hover:text-slate-100 hover:bg-slate-900/40 opacity-70 hover:opacity-100'
                   }`}
                 >
-                  {/* Token Level Rendering with Ruby Phonetics */}
+                  {/* Word / Token-Level Rendering with Phonetics */}
                   {line.tokens && line.tokens.length > 0 ? (
                     line.tokens.map((token, tIdx) => (
-                      <ruby key={tIdx} className="text-lg md:text-2xl font-semibold inline-flex flex-col items-center">
-                        <span className="leading-none">{token.char}</span>
+                      <ruby key={tIdx} className="text-lg md:text-2xl inline-flex flex-col items-center">
+                        <span className="leading-tight">{token.char}</span>
                         {token.phonetic && (
                           <rt className="text-[10px] md:text-xs text-amber-300/80 font-normal tracking-wide">
                             {token.phonetic}
@@ -272,9 +268,9 @@ const LyricsEnginePlayer = ({
                       </ruby>
                     ))
                   ) : (
-                    <p className="text-lg md:text-2xl font-semibold">
+                    <span className="text-lg md:text-2xl font-medium leading-relaxed">
                       {line.text}
-                    </p>
+                    </span>
                   )}
                 </div>
               );
@@ -283,19 +279,11 @@ const LyricsEnginePlayer = ({
         )}
       </main>
 
-      {/* Audio Player Footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 p-4 space-y-4 z-10">
-        <audio
-          ref={audioRef}
-          src={trackData?.audioUrl || ""}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          onEnded={() => setIsPlaying(false)}
-        />
-
-        {/* Custom Progress Slider */}
+      {/* Footer Metronome & Scrubber */}
+      <footer className="bg-slate-900/95 border-t border-slate-800 p-4 space-y-3 z-20 backdrop-blur-md">
+        {/* Scrub Bar */}
         <div className="max-w-3xl mx-auto flex items-center gap-4">
-          <span className="text-xs font-mono text-slate-400 w-12 text-right">
+          <span className="text-xs font-mono text-slate-300 w-12 text-right">
             {Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60) || 0).toString().padStart(2, '0')}
           </span>
 
@@ -303,30 +291,38 @@ const LyricsEnginePlayer = ({
             type="range"
             min="0"
             max={duration || 100}
-            step="0.01"
+            step="0.05"
             value={currentTime || 0}
-            onChange={handleSeek}
+            onChange={(e) => handleSeek(parseFloat(e.target.value))}
             className="flex-1 h-2 appearance-none bg-slate-800 rounded-full outline-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-400 cursor-pointer"
           />
 
-          <span className="text-xs font-mono text-slate-400 w-12">
+          <span className="text-xs font-mono text-slate-300 w-12">
             {Math.floor((duration || 0) / 60)}:{(Math.floor((duration || 0) % 60) || 0).toString().padStart(2, '0')}
           </span>
         </div>
 
-        {/* Play Controls */}
-        <div className="flex items-center justify-center">
+        {/* Action Controls */}
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={handleResetTimeline}
+            title="Reset to 0:00"
+            className="p-2 text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-full transition cursor-pointer"
+          >
+            <RotateCcw size={16} />
+          </button>
+
           <button
             onClick={togglePlayPause}
-            disabled={!trackData?.audioUrl}
-            className="p-3 bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 rounded-full transition shadow-lg shadow-amber-400/20 active:scale-95 cursor-pointer flex items-center justify-center"
+            disabled={!trackData?.lyrics || trackData.lyrics.length === 0}
+            className="p-3.5 bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 rounded-full transition shadow-lg shadow-amber-400/25 active:scale-95 cursor-pointer flex items-center justify-center"
           >
-            {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
+            {isPlaying ? <Pause size={22} /> : <Play size={22} className="ml-0.5" fill="currentColor" />}
           </button>
         </div>
       </footer>
 
-      {/* Modals with Netlify API Route Binding */}
+      {/* Modals */}
       <AutoGeneratorModal 
         isOpen={isAutoGrabOpen} 
         onClose={() => setIsAutoGrabOpen(false)} 
