@@ -1,197 +1,179 @@
 // netlify/functions/grab-lyrics.js
 
-exports.handler = async function (event, context) {
-  // CORS Headers
+exports.handler = async function (event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json'
   };
 
-  // Handle pre-flight request
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: 'OK' };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method Not Allowed. Use POST.' })
-    };
-  }
-
   try {
-    const payload = JSON.parse(event.body || '{}');
-    const songName = (payload.songName || payload.title || '').trim();
-    const artistName = (payload.artistName || payload.artist || '').trim();
-    const audioDurationMs = payload.audioDurationMs || 0;
+    let title = '';
+    let artist = '';
+    let rawQuery = '';
 
-    if (!songName) {
+    // Handle both POST JSON body and GET Query parameters
+    if (event.httpMethod === 'POST') {
+      const body = JSON.parse(event.body || '{}');
+      title = body.title || body.songTitle || body.track || '';
+      artist = body.artist || body.artistName || '';
+      rawQuery = body.query || body.q || '';
+    } else {
+      title = event.queryStringParameters?.title || event.queryStringParameters?.track || '';
+      artist = event.queryStringParameters?.artist || '';
+      rawQuery = event.queryStringParameters?.query || event.queryStringParameters?.q || '';
+    }
+
+    if (!title && !rawQuery) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Song Name is required.' })
+        body: JSON.stringify({ error: 'Please provide a song title or search query.' })
       };
     }
 
-    // Step 2A: Query LRCLIB with fuzzy search
-    const searchQuery = `${songName} ${artistName}`.trim();
-    const searchUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(searchQuery)}`;
+    const LRCLIB_HEADERS = {
+      'User-Agent': 'LyricsEngineStudio/1.0 (https://github.com/williamchan23810-art/lyrics-engine-backend)',
+      'Accept': 'application/json'
+    };
 
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'LyricsEngineStudio/1.0 (williamhchanstudio)'
+    let record = null;
+
+    // Strategy 1: Direct Exact Match (/api/get)
+    if (title && artist) {
+      try {
+        const getUrl = `https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`;
+        const res = await fetch(getUrl, { headers: LRCLIB_HEADERS });
+        if (res.ok) {
+          record = await res.json();
+        }
+      } catch (err) {
+        console.warn('LRCLIB /api/get failed, trying fallback...', err.message);
       }
-    });
-
-    if (!response.ok) {
-      return {
-        statusCode: response.status,
-        headers,
-        body: JSON.stringify({ error: `LRCLIB upstream returned status ${response.status}` })
-      };
     }
 
-    const searchResults = await response.json();
+    // Strategy 2: Structured Search (/api/search?track_name=...&artist_name=...)
+    if (!record && title) {
+      try {
+        const searchUrl = `https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}${artist ? `&artist_name=${encodeURIComponent(artist)}` : ''}`;
+        const res = await fetch(searchUrl, { headers: LRCLIB_HEADERS });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            // Find first record with synced lyrics, or default to first result
+            record = list.find((item) => item.syncedLyrics) || list[0];
+          }
+        }
+      } catch (err) {
+        console.warn('LRCLIB /api/search structured failed...', err.message);
+      }
+    }
 
-    if (!Array.isArray(searchResults) || searchResults.length === 0) {
+    // Strategy 3: General Keyword Query (/api/search?q=...)
+    if (!record) {
+      const searchTerm = rawQuery || `${title} ${artist}`.trim();
+      try {
+        const queryUrl = `https://lrclib.net/api/search?q=${encodeURIComponent(searchTerm)}`;
+        const res = await fetch(queryUrl, { headers: LRCLIB_HEADERS });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            record = list.find((item) => item.syncedLyrics) || list[0];
+          }
+        }
+      } catch (err) {
+        console.warn('LRCLIB /api/search query fallback failed...', err.message);
+      }
+    }
+
+    if (!record) {
       return {
         statusCode: 404,
         headers,
-        body: JSON.stringify({ error: `No lyrics found for "${songName}".` })
+        body: JSON.stringify({ error: `Could not find lyrics for "${title || rawQuery}". Try adjusting the artist or title.` })
       };
     }
 
-    // Step 2B: Find the best match (prioritize syncedLyrics)
-    const bestMatch = searchResults.find((r) => r.syncedLyrics) || searchResults[0];
+    // Parse LRC Timestamps into Structured Lyric Lines
+    const parsedLines = [];
+    if (record.syncedLyrics) {
+      const lrcRows = record.syncedLyrics.split('\n');
+      const lrcRegex = /^\[(\d{2}):(\d{2}(?:\.\d{1,3})?)\](.*)$/;
 
-    // Case 1: Synced lyrics available
-    if (bestMatch.syncedLyrics) {
-      const parsedLines = parseLrcToSchema(bestMatch.syncedLyrics);
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          status: 'success',
-          synced: true,
-          trackId: `${bestMatch.trackName}-${bestMatch.artistName || 'Unknown'}`,
-          title: bestMatch.trackName,
-          artist: bestMatch.artistName,
-          duration: bestMatch.duration || 0,
-          lines: parsedLines
-        })
-      };
+      lrcRows.forEach((row, idx) => {
+        const match = row.trim().match(lrcRegex);
+        if (match) {
+          const minutes = parseInt(match[1], 10);
+          const seconds = parseFloat(match[2]);
+          const text = match[3].trim();
+          const startTime = minutes * 60 + seconds;
+
+          if (text) {
+            parsedLines.push({
+              lineIndex: parsedLines.length,
+              startTime: startTime,
+              startTimeMs: Math.round(startTime * 1000),
+              text: text,
+              tokens: []
+            });
+          }
+        }
+      });
+    } else if (record.plainLyrics) {
+      // Fallback: estimate 3.5s per line if only plain text is available
+      const plainRows = record.plainLyrics.split('\n');
+      plainRows.forEach((row, idx) => {
+        const text = row.trim();
+        if (text) {
+          const startTime = idx * 3.5;
+          parsedLines.push({
+            lineIndex: parsedLines.length,
+            startTime: startTime,
+            startTimeMs: Math.round(startTime * 1000),
+            text: text,
+            tokens: []
+          });
+        }
+      });
     }
 
-    // Case 2: Plain lyrics fallback
-    if (bestMatch.plainLyrics) {
-      const fallbackLines = parsePlainLyricsToSchema(bestMatch.plainLyrics);
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          status: 'success_unsynced',
-          synced: false,
-          trackId: `${bestMatch.trackName}-${bestMatch.artistName || 'Unknown'}`,
-          title: bestMatch.trackName,
-          artist: bestMatch.artistName,
-          duration: bestMatch.duration || 0,
-          lines: fallbackLines
-        })
-      };
+    // Set end times dynamically based on subsequent line start times
+    for (let i = 0; i < parsedLines.length; i++) {
+      if (i < parsedLines.length - 1) {
+        parsedLines[i].endTime = parsedLines[i + 1].startTime;
+        parsedLines[i].endTimeMs = parsedLines[i + 1].startTimeMs;
+      } else {
+        parsedLines[i].endTime = parsedLines[i].startTime + 4.0;
+        parsedLines[i].endTimeMs = parsedLines[i].startTimeMs + 4000;
+      }
     }
+
+    const payload = {
+      trackId: record.id?.toString() || Date.now().toString(),
+      title: record.trackName || record.name || title,
+      artist: record.artistName || artist || 'Unknown Artist',
+      album: record.albumName || '',
+      duration: record.duration || (parsedLines.length > 0 ? parsedLines[parsedLines.length - 1].endTime : 180),
+      instrumental: !!record.instrumental,
+      lyrics: parsedLines
+    };
 
     return {
-      statusCode: 404,
+      statusCode: 200,
       headers,
-      body: JSON.stringify({ error: 'Lyrics text not available for this track.' })
+      body: JSON.stringify(payload)
     };
-  } catch (err) {
+
+  } catch (error) {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: err.message || 'Internal Server Error' })
+      body: JSON.stringify({ error: error.message || 'Internal error fetching lyrics.' })
     };
   }
 };
-
-/**
- * Parses synchronized LRC format into tokenized line schema
- */
-function parseLrcToSchema(lrcText) {
-  const rawLines = lrcText.split('\n');
-  const result = [];
-  const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)/;
-
-  let lineCounter = 0;
-
-  for (const raw of rawLines) {
-    const match = raw.match(timeRegex);
-    if (!match) continue;
-
-    const min = parseInt(match[1], 10);
-    const sec = parseInt(match[2], 10);
-    const msStr = match[3];
-    const ms = msStr.length === 2 ? parseInt(msStr, 10) * 10 : parseInt(msStr, 10);
-    const startTimeMs = (min * 60 + sec) * 1000 + ms;
-    const text = match[4].trim();
-
-    if (!text) continue;
-
-    // Tokenize words for Western languages / characters for Asian scripts
-    const tokens = text.includes(' ')
-      ? text.split(' ').map((word, i) => ({
-          char: word + ' ',
-          phonetic: '',
-          startMs: startTimeMs + i * 350,
-          endMs: startTimeMs + (i + 1) * 350
-        }))
-      : Array.from(text).map((char, i) => ({
-          char,
-          phonetic: '',
-          startMs: startTimeMs + i * 220,
-          endMs: startTimeMs + (i + 1) * 220
-        }));
-
-    const lineDuration =
-      tokens.length > 0 ? tokens[tokens.length - 1].endMs - startTimeMs : 2000;
-
-    result.push({
-      lineIndex: lineCounter++,
-      startTimeMs,
-      endTimeMs: startTimeMs + lineDuration,
-      originalText: text,
-      tokens
-    });
-  }
-
-  // Adjust line end-times to avoid overlapping with next line
-  for (let i = 0; i < result.length - 1; i++) {
-    if (result[i].endTimeMs > result[i + 1].startTimeMs) {
-      result[i].endTimeMs = result[i + 1].startTimeMs;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Fallback parser for plain text lyrics
- */
-function parsePlainLyricsToSchema(plainText) {
-  const lines = plainText.split('\n').map((l) => l.trim()).filter(Boolean);
-  return lines.map((text, idx) => ({
-    lineIndex: idx,
-    startTimeMs: idx * 3000,
-    endTimeMs: (idx + 1) * 3000,
-    originalText: text,
-    tokens: text.split(' ').map((word, wIdx) => ({
-      char: word + ' ',
-      phonetic: '',
-      startMs: idx * 3000 + wIdx * 300,
-      endMs: idx * 3000 + (wIdx + 1) * 300
-    }))
-  }));
-}
