@@ -1,28 +1,45 @@
 // src/LyricsEnginePlayer.jsx
 import React, { useState, useEffect } from 'react';
-import { Film, Edit3, Music, BookOpen, Check, Sparkles, Copy, Filter, Undo2 } from 'lucide-react';
+import {
+  Film,
+  Edit3,
+  Music,
+  BookOpen,
+  Check,
+  Sparkles,
+  Copy,
+  Filter,
+  Undo2,
+  Radio,
+} from 'lucide-react';
 import StoryboardModal from './StoryboardModal';
 import LyricsEditorModal from './LyricsEditorModal';
 import AutoGeneratorModal from './AutoGeneratorModal';
 import NotebookExporterModal from './NotebookExporterModal';
+import PodcastPlayerModal from './PodcastPlayerModal';
 import { distillLyrics } from './utils/lyricDistiller';
 
 const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) => {
-  const [trackData, setTrackData] = useState(initialTrackData);
+  const [trackData, setTrackData] = useState(initialTrackData || null);
   const [storyboardData, setStoryboardData] = useState(null);
   const [isDistilled, setIsDistilled] = useState(false);
 
-  // Modals & Feedback
-  const [isStoryboardOpen, setIsStoryboardOpen] = useState(false);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  // Modal Visibility States
   const [isAutoGrabOpen, setIsAutoGrabOpen] = useState(false);
+  const [isStoryboardOpen, setIsStoryboardOpen] = useState(false);
+  const [isPodcastModalOpen, setIsPodcastModalOpen] = useState(false);
   const [isNotebookModalOpen, setIsNotebookModalOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [copiedLyrics, setCopiedLyrics] = useState(false);
 
+  // Sync state if initial prop changes
   useEffect(() => {
     if (initialTrackData) {
       setTrackData(initialTrackData);
       setIsDistilled(false);
+      if (initialTrackData.storyboard) {
+        setStoryboardData(initialTrackData.storyboard);
+      }
     }
   }, [initialTrackData]);
 
@@ -31,7 +48,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
 
   const handleCopyLyrics = () => {
     if (!activeLyrics.length) return;
-    const plainText = activeLyrics.map((l) => l.text || l.originalText).join('\n');
+    const plainText = activeLyrics.map((l) => l.text || l.originalText || '').join('\n');
     navigator.clipboard.writeText(plainText);
     setCopiedLyrics(true);
     setTimeout(() => setCopiedLyrics(false), 2000);
@@ -39,7 +56,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
 
   return (
     <div className="h-screen w-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden font-sans">
-      {/* Top Header */}
+      {/* Top Application Header Bar */}
       <header className="flex flex-wrap items-center justify-between p-3.5 bg-slate-900/90 border-b border-slate-800 backdrop-blur-md gap-2 z-20 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 bg-amber-400/10 rounded-lg text-amber-400">
@@ -55,8 +72,9 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Global Toolbar Controllers */}
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 1. Ingestion */}
           <button
             onClick={() => setIsAutoGrabOpen(true)}
             className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-lg shadow-amber-400/20 cursor-pointer"
@@ -65,6 +83,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
             <span>Start Auto-Grab</span>
           </button>
 
+          {/* 2. Meaning & Distillation */}
           <button
             onClick={() => setIsDistilled(!isDistilled)}
             disabled={!rawLyrics.length}
@@ -78,6 +97,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
             <span>{isDistilled ? 'Show Raw' : 'Distill Lyrics'}</span>
           </button>
 
+          {/* 3. Visual Director */}
           <button
             onClick={() => setIsStoryboardOpen(true)}
             disabled={!rawLyrics.length}
@@ -87,15 +107,31 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
             <span>AI Storyboard</span>
           </button>
 
+          {/* 4. Native 2-Host In-App Podcast Engine */}
+          <button
+            onClick={() => setIsPodcastModalOpen(true)}
+            disabled={!rawLyrics.length}
+            className="flex items-center gap-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-md shadow-amber-400/20 cursor-pointer disabled:opacity-40"
+          >
+            <Radio size={13} />
+            <span>AI Podcast</span>
+          </button>
+
+          {/* 5. Quick Clipboard */}
           <button
             onClick={handleCopyLyrics}
             disabled={!activeLyrics.length}
             className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-40 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
           >
-            {copiedLyrics ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-amber-400" />}
+            {copiedLyrics ? (
+              <Check size={13} className="text-emerald-400" />
+            ) : (
+              <Copy size={13} className="text-amber-400" />
+            )}
             <span>{copiedLyrics ? 'Copied' : isDistilled ? 'Copy Distilled' : 'Copy Raw'}</span>
           </button>
 
+          {/* 6. Manual Text Scrubber */}
           <button
             onClick={() => setIsEditorOpen(true)}
             disabled={!rawLyrics.length}
@@ -105,7 +141,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
             <span>Edit</span>
           </button>
 
-          {/* Export to Notebook -> Launches One-Click Bridge Modal */}
+          {/* 7. Gemini Notebook 1-Click Bridge Modal */}
           <button
             onClick={() => setIsNotebookModalOpen(true)}
             disabled={!rawLyrics.length}
@@ -117,7 +153,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
         </div>
       </header>
 
-      {/* Clean Lyrics Stage */}
+      {/* Main Lyrics Stage (Zero Clutter, No Scrollbars) */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 flex flex-col items-center [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden select-text">
         {!activeLyrics.length ? (
           <div className="flex flex-col items-center justify-center my-auto space-y-2 text-slate-500">
@@ -128,7 +164,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
           <div className="w-full max-w-2xl space-y-2 py-4 text-center">
             {isDistilled && (
               <div className="mb-4 inline-block px-3 py-1 bg-amber-400/10 border border-amber-400/20 rounded-full text-[11px] font-medium text-amber-300">
-                ✨ Lyrics Distilled: Filtered duplicate choruses & vocal fillers ({activeLyrics.length} story beats)
+                ✨ Lyrics Distilled: Filtered duplicate refrains & vocal fillers ({activeLyrics.length} story beats)
               </div>
             )}
 
@@ -146,7 +182,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
         )}
       </main>
 
-      {/* Modals */}
+      {/* Modals & Subsystems */}
       <AutoGeneratorModal
         isOpen={isAutoGrabOpen}
         onClose={() => setIsAutoGrabOpen(false)}
@@ -157,6 +193,7 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
         }}
         apiBaseUrl={apiBaseUrl}
       />
+
       <StoryboardModal
         trackData={{ ...trackData, lyrics: activeLyrics }}
         isOpen={isStoryboardOpen}
@@ -164,13 +201,25 @@ const LyricsEnginePlayer = ({ trackData: initialTrackData, apiBaseUrl = '' }) =>
         onStoryboardGenerated={(data) => setStoryboardData(data)}
         apiBaseUrl={apiBaseUrl}
       />
+
+      <PodcastPlayerModal
+        isOpen={isPodcastModalOpen}
+        onClose={() => setIsPodcastModalOpen(false)}
+        trackData={{ ...trackData, lyrics: activeLyrics }}
+        storyboardData={storyboardData}
+        apiBaseUrl={apiBaseUrl}
+      />
+
       <LyricsEditorModal
         trackData={trackData}
         isOpen={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
-        onSaveLyrics={(newLyrics) => setTrackData((prev) => ({ ...prev, lyrics: newLyrics }))}
+        onSaveLyrics={(newLyrics) =>
+          setTrackData((prev) => ({ ...prev, lyrics: newLyrics }))
+        }
         apiBaseUrl={apiBaseUrl}
       />
+
       <NotebookExporterModal
         isOpen={isNotebookModalOpen}
         onClose={() => setIsNotebookModalOpen(false)}
