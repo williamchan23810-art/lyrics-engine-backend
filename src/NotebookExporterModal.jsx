@@ -14,7 +14,6 @@ const NotebookExporterModal = ({ isOpen, onClose, trackData, storyboardData }) =
   const artistName = trackData.artist || 'Unknown Artist';
   const notebookTitle = generateNotebookName(songTitle, artistName);
 
-  // Compile Master Markdown Dossier
   const buildDossierMarkdown = () => {
     const formattedDate = new Date().toISOString().split('T')[0];
     let md = `${songTitle} - Song Appreciation & Visual Storytelling Dossier\n`;
