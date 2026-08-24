@@ -12,8 +12,8 @@ import {
   Sun,
   Video,
   Loader2,
-  RefreshCw,
-  Edit3,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 
 const StoryboardModal = ({
@@ -35,7 +35,7 @@ const StoryboardModal = ({
   const [copiedMotionIdx, setCopiedMotionIdx] = useState(null);
   const [aspectRatio, setAspectRatio] = useState('16:9');
 
-  // Initialize state when storyboard changes or modal opens
+  // Initialize or synchronize state when trackData or modal opens
   useEffect(() => {
     if (trackData?.storyboard) {
       setStoryboard(trackData.storyboard);
@@ -44,6 +44,7 @@ const StoryboardModal = ({
 
   if (!isOpen) return null;
 
+  // Handler: Call Gemini 2.5 Flash for complete automatic storyboard
   const handleGenerateStoryboard = async () => {
     setLoadingStoryboard(true);
     setError(null);
@@ -69,9 +70,51 @@ const StoryboardModal = ({
     }
   };
 
+  // Handler: Instantiate a blank scene card for pasting NotebookLM prompts
+  const handleAddCustomScene = () => {
+    const defaultScene = {
+      sceneIndex: storyboard?.scenes ? storyboard.scenes.length + 1 : 1,
+      lyricSegment: 'NotebookLM Grounded Scene',
+      visualConcept: 'Custom cinematography staged from NotebookLM',
+      imagePrompt: '',
+      motionPrompt: '',
+      lighting: 'Tungsten & Chiaroscuro',
+      camera: '50mm Anamorphic Prime',
+    };
+
+    if (!storyboard) {
+      setStoryboard({
+        songOverview: {
+          cinematicStyle: '35mm Film Still (Custom NotebookLM Production)',
+          emotionalArc: 'Grounded narrative visual progression',
+        },
+        scenes: [defaultScene],
+      });
+    } else {
+      setStoryboard((prev) => ({
+        ...prev,
+        scenes: [...(prev.scenes || []), defaultScene],
+      }));
+    }
+  };
+
+  // Handler: Delete a specific scene card
+  const handleDeleteScene = (idxToDelete) => {
+    if (!storyboard?.scenes) return;
+    const updatedScenes = storyboard.scenes.filter((_, idx) => idx !== idxToDelete);
+    setStoryboard((prev) => ({
+      ...prev,
+      scenes: updatedScenes.length > 0 ? updatedScenes : null,
+    }));
+  };
+
+  // Handler: Dispatch Imagen 3 Keyframe Synthesis
   const handleRenderKeyframe = async (index, fallbackPrompt) => {
     const promptToUse = customImagePrompts[index] || fallbackPrompt;
-    if (!promptToUse) return;
+    if (!promptToUse || !promptToUse.trim()) {
+      alert('Please enter or paste an Imagen 3 prompt before rendering.');
+      return;
+    }
 
     setRenderingIndex(index);
     try {
@@ -92,12 +135,13 @@ const StoryboardModal = ({
         [index]: data.imageBase64,
       }));
     } catch (err) {
-      alert(`Keyframe Render Failed: ${err.message}`);
+      alert(`Keyframe Render Error: ${err.message}`);
     } finally {
       setRenderingIndex(null);
     }
   };
 
+  // Handler: Copy Veo 3.1 Motion Cue to Clipboard
   const handleCopyMotionPrompt = (index, fallbackPrompt) => {
     const motionToUse = customMotionPrompts[index] || fallbackPrompt;
     if (!motionToUse) return;
@@ -107,6 +151,7 @@ const StoryboardModal = ({
     setTimeout(() => setCopiedMotionIdx(null), 2000);
   };
 
+  // Handler: Download Rendered JPG Keyframe
   const handleDownloadImage = (index) => {
     const dataUrl = renderedImages[index];
     if (!dataUrl) return;
@@ -120,8 +165,9 @@ const StoryboardModal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md font-sans">
       <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/70">
+        
+        {/* Top Navigation & Controls */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-400/10 text-amber-400 rounded-lg">
               <Film size={20} />
@@ -134,12 +180,12 @@ const StoryboardModal = ({
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                {trackData?.title} — {trackData?.artist}
+                {trackData?.title || 'Untitled'} — {trackData?.artist || 'Unknown Artist'}
               </p>
             </div>
           </div>
 
-          {/* Top Control Bar */}
+          {/* Action Toolbar */}
           <div className="flex items-center gap-2">
             {/* Aspect Ratio Switcher */}
             <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-[11px]">
@@ -161,16 +207,26 @@ const StoryboardModal = ({
               </button>
             </div>
 
-            {/* Prompt Generator Trigger */}
+            {/* AI Auto-Generate */}
             <button
               onClick={handleGenerateStoryboard}
               disabled={loadingStoryboard}
               className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-lg shadow-amber-400/20 cursor-pointer disabled:opacity-40"
             >
               {loadingStoryboard ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-              <span>{storyboard ? 'Regenerate Prompts' : 'Generate Prompts'}</span>
+              <span>{storyboard ? 'Regenerate All' : 'Generate Prompts'}</span>
             </button>
 
+            {/* Add Custom Scene */}
+            <button
+              onClick={handleAddCustomScene}
+              className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
+            >
+              <Plus size={13} className="text-amber-400" />
+              <span>Add Scene</span>
+            </button>
+
+            {/* Close Modal */}
             <button
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg transition cursor-pointer"
@@ -180,7 +236,7 @@ const StoryboardModal = ({
           </div>
         </div>
 
-        {/* Modal Scrollable Workspace */}
+        {/* Workspace Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 [scrollbar-width:none]">
           {error && (
             <div className="p-3 bg-red-950/40 border border-red-800 rounded-xl text-xs text-red-300">
@@ -188,30 +244,56 @@ const StoryboardModal = ({
             </div>
           )}
 
+          {/* Empty State with Dual Action Entry */}
           {!storyboard && !loadingStoryboard && (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-2">
-              <Camera size={36} className="stroke-1 opacity-50" />
-              <p className="text-xs font-medium">Click "Generate Prompts" or paste custom prompts from NotebookLM below.</p>
+            <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-4">
+              <Camera size={44} className="stroke-1 opacity-40 text-amber-400" />
+              <div className="text-center space-y-1">
+                <p className="text-sm font-semibold text-slate-200">No Storyboard Scenes Active</p>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Automatically generate scene prompts with Gemini 2.5 Flash, or add a custom card to paste directly from NotebookLM.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={handleGenerateStoryboard}
+                  className="flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 px-4 py-2 rounded-xl text-xs font-bold transition shadow-lg shadow-amber-400/20 cursor-pointer"
+                >
+                  <Sparkles size={14} />
+                  <span>Generate Prompts (Gemini)</span>
+                </button>
+
+                <button
+                  onClick={handleAddCustomScene}
+                  className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-semibold border border-slate-700 transition cursor-pointer"
+                >
+                  <Plus size={14} className="text-amber-400" />
+                  <span>+ Add Custom Scene Card</span>
+                </button>
+              </div>
             </div>
           )}
 
+          {/* Loading Animation */}
           {loadingStoryboard && (
             <div className="flex flex-col items-center justify-center py-20 text-amber-400 space-y-3">
               <Loader2 size={32} className="animate-spin" />
               <p className="text-xs font-semibold text-slate-300">
-                Gemini 2.5 Flash is mapping the visual narrative & cinematography...
+                Gemini 2.5 Flash is mapping the cinematic narrative & visual storyboard...
               </p>
             </div>
           )}
 
+          {/* Active Storyboard Scene List */}
           {storyboard && !loadingStoryboard && (
             <>
-              {/* Visual Tone & Cinematic Style Header */}
+              {/* Song Concept Header */}
               {storyboard.songOverview && (
                 <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5 text-xs">
                   <div className="flex items-center gap-2 text-amber-400 font-bold">
                     <Sun size={14} />
-                    <span>Visual Tone & Direction</span>
+                    <span>Visual Tone & Cinematic Direction</span>
                   </div>
                   <p className="text-slate-300 leading-relaxed">
                     <span className="font-semibold text-slate-100">Style: </span>
@@ -224,20 +306,20 @@ const StoryboardModal = ({
                 </div>
               )}
 
-              {/* Scene Cards Workspace */}
+              {/* Scene Cards */}
               <div className="space-y-4">
                 {storyboard.scenes?.map((scene, idx) => {
                   const isRendering = renderingIndex === idx;
                   const keyframeImage = renderedImages[idx];
-                  const activeImgPrompt = customImagePrompts[idx] ?? scene.imagePrompt;
-                  const activeMotionPrompt = customMotionPrompts[idx] ?? scene.motionPrompt;
+                  const activeImgPrompt = customImagePrompts[idx] !== undefined ? customImagePrompts[idx] : scene.imagePrompt;
+                  const activeMotionPrompt = customMotionPrompts[idx] !== undefined ? customMotionPrompts[idx] : scene.motionPrompt;
 
                   return (
                     <div
                       key={idx}
                       className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3 transition-all hover:border-slate-700"
                     >
-                      {/* Scene Header */}
+                      {/* Scene Card Header */}
                       <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 bg-amber-400/20 text-amber-300 rounded font-mono text-[11px] font-bold">
@@ -249,7 +331,7 @@ const StoryboardModal = ({
                         </div>
 
                         <div className="flex items-center gap-2">
-                          {/* Render Imagen 3 Keyframe */}
+                          {/* Render Imagen 3 Frame */}
                           <button
                             onClick={() => handleRenderKeyframe(idx, scene.imagePrompt)}
                             disabled={isRendering}
@@ -276,51 +358,55 @@ const StoryboardModal = ({
                             )}
                             <span>{copiedMotionIdx === idx ? 'Copied' : 'Veo Prompt'}</span>
                           </button>
+
+                          {/* Delete Card */}
+                          <button
+                            onClick={() => handleDeleteScene(idx)}
+                            className="p-1 text-slate-500 hover:text-red-400 rounded transition cursor-pointer"
+                            title="Remove Scene"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Content Grid: Visual Concept + Prompt Editors + Image Canvas */}
+                      {/* Content Grid: Prompts + Image Canvas */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {/* Left 2 Columns: Editable Prompts & Cinematic Specs */}
+                        {/* Left 2 Columns: Editable Inputs */}
                         <div className="md:col-span-2 space-y-2.5 text-xs">
-                          <p className="text-slate-300 text-[11px]">
-                            <span className="font-semibold text-slate-400">Concept: </span>
-                            {scene.visualConcept}
-                          </p>
-
-                          {/* Imagen 3 Editable Prompt */}
+                          {/* Imagen 3 Editable Textarea */}
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
                               <Sparkles size={11} />
-                              <span>Imagen 3 Anchor Prompt (Editable)</span>
+                              <span>Imagen 3 Anchor Prompt (Editable / Paste from NotebookLM)</span>
                             </label>
                             <textarea
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-amber-400 outline-none resize-none h-16 leading-relaxed"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 font-mono focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none resize-none h-20 leading-relaxed"
                               value={activeImgPrompt}
                               onChange={(e) =>
                                 setCustomImagePrompts((prev) => ({ ...prev, [idx]: e.target.value }))
                               }
-                              placeholder="Enter Imagen 3 prompt or paste from NotebookLM..."
+                              placeholder="Paste Imagen 3 prompt here..."
                             />
                           </div>
 
-                          {/* Veo 3.1 Editable Motion Prompt */}
+                          {/* Veo 3.1 Editable Textarea */}
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1">
                               <Video size={11} />
                               <span>Veo 3.1 Motion Cue (Editable)</span>
                             </label>
                             <textarea
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-cyan-400 outline-none resize-none h-14 leading-relaxed"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none resize-none h-14 leading-relaxed"
                               value={activeMotionPrompt}
                               onChange={(e) =>
                                 setCustomMotionPrompts((prev) => ({ ...prev, [idx]: e.target.value }))
                               }
-                              placeholder="Enter Veo 3.1 camera motion cue..."
+                              placeholder="Paste Veo 3.1 camera motion cue here..."
                             />
                           </div>
 
-                          {/* Camera & Lighting Specs */}
+                          {/* Scene Metadata */}
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-0.5">
                             {scene.lighting && (
                               <span className="flex items-center gap-1">
@@ -361,7 +447,7 @@ const StoryboardModal = ({
                             <div className="flex flex-col items-center space-y-1.5 text-indigo-400 p-4 text-center">
                               <Loader2 size={24} className="animate-spin" />
                               <span className="text-[11px] font-medium text-slate-300">
-                                Rendering Imagen 3 Frame...
+                                Rendering with Imagen 3...
                               </span>
                             </div>
                           ) : (
@@ -372,7 +458,7 @@ const StoryboardModal = ({
                                 onClick={() => handleRenderKeyframe(idx, scene.imagePrompt)}
                                 className="text-[10px] font-semibold text-amber-400 hover:text-amber-300 underline cursor-pointer"
                               >
-                                Render Now
+                                Render Keyframe
                               </button>
                             </div>
                           )}
