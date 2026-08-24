@@ -18,6 +18,8 @@ import {
   FileVideo,
 } from 'lucide-react';
 
+const LOCAL_STORAGE_KEY = 'karaoke_storyboard_session';
+
 const StoryboardModal = ({
   isOpen,
   onClose,
@@ -40,16 +42,57 @@ const StoryboardModal = ({
   // Option B: Video MP4 Compilation State
   const [isExportingVideo, setIsExportingVideo] = useState(false);
 
-  // Sync state if trackData already contains a storyboard
+  // 1. Initial Load & Persistent State Rehydration
   useEffect(() => {
-    if (trackData?.storyboard) {
-      setStoryboard(trackData.storyboard);
+    try {
+      const savedSession = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession);
+        if (parsed.storyboard) setStoryboard(parsed.storyboard);
+        if (parsed.renderedImages) setRenderedImages(parsed.renderedImages);
+        if (parsed.customImagePrompts) setCustomImagePrompts(parsed.customImagePrompts);
+        if (parsed.customMotionPrompts) setCustomMotionPrompts(parsed.customMotionPrompts);
+        if (parsed.aspectRatio) setAspectRatio(parsed.aspectRatio);
+      } else if (trackData?.storyboard) {
+        setStoryboard(trackData.storyboard);
+      }
+    } catch (e) {
+      console.warn('Could not rehydrate session from localStorage:', e);
     }
   }, [trackData]);
 
+  // 2. Automatically Mirror State to Storage
+  useEffect(() => {
+    if (storyboard || Object.keys(renderedImages).length > 0) {
+      const payload = {
+        storyboard,
+        renderedImages,
+        customImagePrompts,
+        customMotionPrompts,
+        aspectRatio,
+      };
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+      } catch (e) {
+        console.warn('Storage quota limit reached:', e);
+      }
+    }
+  }, [storyboard, renderedImages, customImagePrompts, customMotionPrompts, aspectRatio]);
+
   if (!isOpen) return null;
 
-  // 1. Auto-generate full storyboard with Gemini 2.5 Flash
+  // Handler: Clear current session cache
+  const handleClearSession = () => {
+    if (window.confirm('Reset this storyboard and start fresh?')) {
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      setStoryboard(null);
+      setRenderedImages({});
+      setCustomImagePrompts({});
+      setCustomMotionPrompts({});
+    }
+  };
+
+  // Handler: Auto-generate full storyboard with Gemini 2.5 Flash
   const handleGenerateStoryboard = async () => {
     setLoadingStoryboard(true);
     setError(null);
@@ -85,7 +128,7 @@ const StoryboardModal = ({
     }
   };
 
-  // 2. Add custom scene card directly
+  // Handler: Add custom scene card directly
   const handleAddCustomScene = () => {
     setError(null);
     const defaultScene = {
@@ -114,7 +157,7 @@ const StoryboardModal = ({
     }
   };
 
-  // 3. Remove a scene card
+  // Handler: Delete scene card
   const handleDeleteScene = (idxToDelete) => {
     if (!storyboard?.scenes) return;
     const updatedScenes = storyboard.scenes.filter((_, idx) => idx !== idxToDelete);
@@ -124,7 +167,7 @@ const StoryboardModal = ({
     }));
   };
 
-  // 4. Render keyframe with safe serverless endpoint
+  // Handler: Render keyframe with safe serverless endpoint
   const handleRenderKeyframe = async (index, fallbackPrompt) => {
     const promptToUse = customImagePrompts[index] !== undefined ? customImagePrompts[index] : fallbackPrompt;
     if (!promptToUse || !promptToUse.trim()) {
@@ -171,7 +214,7 @@ const StoryboardModal = ({
     }
   };
 
-  // 5. Copy Veo 3.1 motion cue to clipboard
+  // Handler: Copy Veo 3.1 motion cue to clipboard
   const handleCopyMotionPrompt = (index, fallbackPrompt) => {
     const motionToUse = customMotionPrompts[index] !== undefined ? customMotionPrompts[index] : fallbackPrompt;
     if (!motionToUse) return;
@@ -181,7 +224,7 @@ const StoryboardModal = ({
     setTimeout(() => setCopiedMotionIdx(null), 2000);
   };
 
-  // 6. Download individual rendered image
+  // Handler: Download individual rendered image
   const handleDownloadImage = (index) => {
     const dataUrl = renderedImages[index];
     if (!dataUrl) return;
@@ -192,7 +235,7 @@ const StoryboardModal = ({
     a.click();
   };
 
-  // 7. Option B: Assemble and Export Full Video (.mp4)
+  // Handler: Option B Video MP4 Compilation
   const handleExportFullVideo = async () => {
     const renderedList = Object.values(renderedImages);
     if (renderedList.length === 0) {
@@ -225,7 +268,6 @@ const StoryboardModal = ({
         throw new Error(data.error || 'Video assembly failed.');
       }
 
-      // Automatically trigger browser download for the generated MP4 file
       const a = document.createElement('a');
       a.href = data.videoBase64;
       a.download = data.videoFileName || 'Story-Reel.mp4';
@@ -241,7 +283,7 @@ const StoryboardModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md font-sans">
       <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
-        {/* Modal Header Bar with Trigger Buttons */}
+        {/* Modal Header Bar with Action Controls */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-400/10 text-amber-400 rounded-lg">
@@ -255,7 +297,7 @@ const StoryboardModal = ({
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                {trackData?.title || 'Untitled'} — {trackData?.artist || 'Unknown Artist'}
+                {trackData?.title || 'Don\'t Cry Out Loud'} — {trackData?.artist || 'Melissa Manchester'}
               </p>
             </div>
           </div>
@@ -282,7 +324,7 @@ const StoryboardModal = ({
               </button>
             </div>
 
-            {/* AI Auto-Generate Button */}
+            {/* AI Auto-Generate */}
             <button
               onClick={handleGenerateStoryboard}
               disabled={loadingStoryboard}
@@ -292,7 +334,7 @@ const StoryboardModal = ({
               <span>{storyboard ? 'Regenerate All' : 'Generate Prompts'}</span>
             </button>
 
-            {/* Add Custom Scene Button */}
+            {/* Add Custom Scene */}
             <button
               onClick={handleAddCustomScene}
               className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
@@ -376,19 +418,23 @@ const StoryboardModal = ({
           {storyboard && !loadingStoryboard && (
             <>
               {storyboard.songOverview && (
-                <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5 text-xs">
-                  <div className="flex items-center gap-2 text-amber-400 font-bold">
-                    <Sun size={14} />
-                    <span>Visual Tone & Cinematic Direction</span>
+                <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5 text-xs flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-amber-400 font-bold">
+                      <Sun size={14} />
+                      <span>Visual Tone & Cinematic Direction</span>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed">
+                      <span className="font-semibold text-slate-100">Style: </span>
+                      {storyboard.songOverview.cinematicStyle || 'Atmospheric 35mm film'}
+                    </p>
                   </div>
-                  <p className="text-slate-300 leading-relaxed">
-                    <span className="font-semibold text-slate-100">Style: </span>
-                    {storyboard.songOverview.cinematicStyle || 'Atmospheric 35mm film'}
-                  </p>
-                  <p className="text-slate-400 text-[11px]">
-                    <span className="font-semibold text-slate-300">Emotional Progression: </span>
-                    {storyboard.songOverview.emotionalArc}
-                  </p>
+                  <button
+                    onClick={handleClearSession}
+                    className="text-[10px] text-slate-500 hover:text-red-400 underline cursor-pointer"
+                  >
+                    Reset Session Cache
+                  </button>
                 </div>
               )}
 
@@ -458,7 +504,6 @@ const StoryboardModal = ({
 
                       {/* Content Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {/* Prompts Input Column */}
                         <div className="md:col-span-2 space-y-2.5 text-xs">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
