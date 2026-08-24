@@ -14,6 +14,7 @@ import {
   Loader2,
   Plus,
   Trash2,
+  AlertCircle,
 } from 'lucide-react';
 
 const StoryboardModal = ({
@@ -35,7 +36,7 @@ const StoryboardModal = ({
   const [copiedMotionIdx, setCopiedMotionIdx] = useState(null);
   const [aspectRatio, setAspectRatio] = useState('16:9');
 
-  // Initialize or synchronize state when trackData or modal opens
+  // Sync state if trackData already contains a storyboard
   useEffect(() => {
     if (trackData?.storyboard) {
       setStoryboard(trackData.storyboard);
@@ -44,7 +45,7 @@ const StoryboardModal = ({
 
   if (!isOpen) return null;
 
-  // Handler: Call Gemini 2.5 Flash for complete automatic storyboard
+  // 1. Auto-generate full storyboard with Gemini 2.5 Flash
   const handleGenerateStoryboard = async () => {
     setLoadingStoryboard(true);
     setError(null);
@@ -53,14 +54,24 @@ const StoryboardModal = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: trackData.title,
-          artist: trackData.artist,
-          lyrics: trackData.lyrics,
+          title: trackData?.title || 'Untitled',
+          artist: trackData?.artist || 'Unknown Artist',
+          lyrics: trackData?.lyrics || [],
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate visual storyboard');
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        throw new Error(`Invalid response from server (${res.status}): ${rawText.slice(0, 100)}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to generate visual storyboard');
+      }
+
       setStoryboard(data.storyboard);
       if (onStoryboardGenerated) onStoryboardGenerated(data.storyboard);
     } catch (err) {
@@ -70,8 +81,9 @@ const StoryboardModal = ({
     }
   };
 
-  // Handler: Instantiate a blank scene card for pasting NotebookLM prompts
+  // 2. Add custom scene card directly (e.g. for pasting from NotebookLM)
   const handleAddCustomScene = () => {
+    setError(null);
     const defaultScene = {
       sceneIndex: storyboard?.scenes ? storyboard.scenes.length + 1 : 1,
       lyricSegment: 'NotebookLM Grounded Scene',
@@ -98,7 +110,7 @@ const StoryboardModal = ({
     }
   };
 
-  // Handler: Delete a specific scene card
+  // 3. Remove a scene card
   const handleDeleteScene = (idxToDelete) => {
     if (!storyboard?.scenes) return;
     const updatedScenes = storyboard.scenes.filter((_, idx) => idx !== idxToDelete);
@@ -108,27 +120,41 @@ const StoryboardModal = ({
     }));
   };
 
-  // Handler: Dispatch Imagen 3 Keyframe Synthesis
+  // 4. Render keyframe with Imagen 3 via safe serverless endpoint
   const handleRenderKeyframe = async (index, fallbackPrompt) => {
-    const promptToUse = customImagePrompts[index] || fallbackPrompt;
+    const promptToUse = customImagePrompts[index] !== undefined ? customImagePrompts[index] : fallbackPrompt;
     if (!promptToUse || !promptToUse.trim()) {
       alert('Please enter or paste an Imagen 3 prompt before rendering.');
       return;
     }
 
     setRenderingIndex(index);
+    setError(null);
     try {
       const res = await fetch(`${apiBaseUrl}/.netlify/functions/generate-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: promptToUse,
+          prompt: promptToUse.trim(),
           aspectRatio: aspectRatio,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to render keyframe with Imagen 3');
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        throw new Error(`Server returned non-JSON response (${res.status}): ${rawText.slice(0, 100)}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || `Keyframe render failed with status ${res.status}`);
+      }
+
+      if (!data.imageBase64) {
+        throw new Error('No image payload received from Imagen 3 endpoint.');
+      }
 
       setRenderedImages((prev) => ({
         ...prev,
@@ -141,9 +167,9 @@ const StoryboardModal = ({
     }
   };
 
-  // Handler: Copy Veo 3.1 Motion Cue to Clipboard
+  // 5. Copy Veo 3.1 motion cue to clipboard
   const handleCopyMotionPrompt = (index, fallbackPrompt) => {
-    const motionToUse = customMotionPrompts[index] || fallbackPrompt;
+    const motionToUse = customMotionPrompts[index] !== undefined ? customMotionPrompts[index] : fallbackPrompt;
     if (!motionToUse) return;
 
     navigator.clipboard.writeText(motionToUse);
@@ -151,7 +177,7 @@ const StoryboardModal = ({
     setTimeout(() => setCopiedMotionIdx(null), 2000);
   };
 
-  // Handler: Download Rendered JPG Keyframe
+  // 6. Download rendered image
   const handleDownloadImage = (index) => {
     const dataUrl = renderedImages[index];
     if (!dataUrl) return;
@@ -166,7 +192,7 @@ const StoryboardModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md font-sans">
       <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
-        {/* Top Navigation & Controls */}
+        {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-400/10 text-amber-400 rounded-lg">
@@ -185,7 +211,7 @@ const StoryboardModal = ({
             </div>
           </div>
 
-          {/* Action Toolbar */}
+          {/* Action Controls */}
           <div className="flex items-center gap-2">
             {/* Aspect Ratio Switcher */}
             <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-[11px]">
@@ -236,15 +262,16 @@ const StoryboardModal = ({
           </div>
         </div>
 
-        {/* Workspace Body */}
+        {/* Modal Workspace Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 [scrollbar-width:none]">
           {error && (
-            <div className="p-3 bg-red-950/40 border border-red-800 rounded-xl text-xs text-red-300">
-              {error}
+            <div className="p-3 bg-red-950/40 border border-red-800 rounded-xl text-xs text-red-300 flex items-start gap-2">
+              <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-400" />
+              <span>{error}</span>
             </div>
           )}
 
-          {/* Empty State with Dual Action Entry */}
+          {/* Empty State with Action Cards */}
           {!storyboard && !loadingStoryboard && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-4">
               <Camera size={44} className="stroke-1 opacity-40 text-amber-400" />
@@ -275,7 +302,7 @@ const StoryboardModal = ({
             </div>
           )}
 
-          {/* Loading Animation */}
+          {/* Loading State */}
           {loadingStoryboard && (
             <div className="flex flex-col items-center justify-center py-20 text-amber-400 space-y-3">
               <Loader2 size={32} className="animate-spin" />
@@ -285,10 +312,10 @@ const StoryboardModal = ({
             </div>
           )}
 
-          {/* Active Storyboard Scene List */}
+          {/* Active Storyboard Cards */}
           {storyboard && !loadingStoryboard && (
             <>
-              {/* Song Concept Header */}
+              {/* Cinematic Overview Banner */}
               {storyboard.songOverview && (
                 <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5 text-xs">
                   <div className="flex items-center gap-2 text-amber-400 font-bold">
@@ -306,7 +333,7 @@ const StoryboardModal = ({
                 </div>
               )}
 
-              {/* Scene Cards */}
+              {/* Scene Cards List */}
               <div className="space-y-4">
                 {storyboard.scenes?.map((scene, idx) => {
                   const isRendering = renderingIndex === idx;
@@ -319,7 +346,7 @@ const StoryboardModal = ({
                       key={idx}
                       className="p-4 bg-slate-950/70 rounded-xl border border-slate-800 space-y-3 transition-all hover:border-slate-700"
                     >
-                      {/* Scene Card Header */}
+                      {/* Card Header */}
                       <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 bg-amber-400/20 text-amber-300 rounded font-mono text-[11px] font-bold">
@@ -359,7 +386,7 @@ const StoryboardModal = ({
                             <span>{copiedMotionIdx === idx ? 'Copied' : 'Veo Prompt'}</span>
                           </button>
 
-                          {/* Delete Card */}
+                          {/* Delete Scene Card */}
                           <button
                             onClick={() => handleDeleteScene(idx)}
                             className="p-1 text-slate-500 hover:text-red-400 rounded transition cursor-pointer"
@@ -370,11 +397,11 @@ const StoryboardModal = ({
                         </div>
                       </div>
 
-                      {/* Content Grid: Prompts + Image Canvas */}
+                      {/* Content Grid: Prompts & Live Render Viewport */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {/* Left 2 Columns: Editable Inputs */}
                         <div className="md:col-span-2 space-y-2.5 text-xs">
-                          {/* Imagen 3 Editable Textarea */}
+                          {/* Imagen 3 Editable Prompt Textarea */}
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
                               <Sparkles size={11} />
@@ -390,7 +417,7 @@ const StoryboardModal = ({
                             />
                           </div>
 
-                          {/* Veo 3.1 Editable Textarea */}
+                          {/* Veo 3.1 Editable Motion Textarea */}
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1">
                               <Video size={11} />
@@ -406,7 +433,7 @@ const StoryboardModal = ({
                             />
                           </div>
 
-                          {/* Scene Metadata */}
+                          {/* Metadata Badges */}
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-0.5">
                             {scene.lighting && (
                               <span className="flex items-center gap-1">
@@ -423,7 +450,7 @@ const StoryboardModal = ({
                           </div>
                         </div>
 
-                        {/* Right Column: Keyframe Preview Canvas */}
+                        {/* Right Column: Live Render Viewport */}
                         <div className="md:col-span-1 flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-lg overflow-hidden min-h-[160px] relative group">
                           {keyframeImage ? (
                             <>
