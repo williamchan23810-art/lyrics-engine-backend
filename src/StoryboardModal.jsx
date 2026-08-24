@@ -15,6 +15,7 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  FileVideo,
 } from 'lucide-react';
 
 const StoryboardModal = ({
@@ -35,6 +36,9 @@ const StoryboardModal = ({
   const [customMotionPrompts, setCustomMotionPrompts] = useState({});
   const [copiedMotionIdx, setCopiedMotionIdx] = useState(null);
   const [aspectRatio, setAspectRatio] = useState('16:9');
+
+  // Option B: Video MP4 Compilation State
+  const [isExportingVideo, setIsExportingVideo] = useState(false);
 
   // Sync state if trackData already contains a storyboard
   useEffect(() => {
@@ -81,7 +85,7 @@ const StoryboardModal = ({
     }
   };
 
-  // 2. Add custom scene card directly (e.g. for pasting from NotebookLM)
+  // 2. Add custom scene card directly
   const handleAddCustomScene = () => {
     setError(null);
     const defaultScene = {
@@ -120,7 +124,7 @@ const StoryboardModal = ({
     }));
   };
 
-  // 4. Render keyframe with Imagen 3 via safe serverless endpoint
+  // 4. Render keyframe with safe serverless endpoint
   const handleRenderKeyframe = async (index, fallbackPrompt) => {
     const promptToUse = customImagePrompts[index] !== undefined ? customImagePrompts[index] : fallbackPrompt;
     if (!promptToUse || !promptToUse.trim()) {
@@ -177,7 +181,7 @@ const StoryboardModal = ({
     setTimeout(() => setCopiedMotionIdx(null), 2000);
   };
 
-  // 6. Download rendered image
+  // 6. Download individual rendered image
   const handleDownloadImage = (index) => {
     const dataUrl = renderedImages[index];
     if (!dataUrl) return;
@@ -188,11 +192,56 @@ const StoryboardModal = ({
     a.click();
   };
 
+  // 7. Option B: Assemble and Export Full Video (.mp4)
+  const handleExportFullVideo = async () => {
+    const renderedList = Object.values(renderedImages);
+    if (renderedList.length === 0) {
+      alert('Please render at least one keyframe before exporting the video.');
+      return;
+    }
+
+    setIsExportingVideo(true);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBaseUrl}/.netlify/functions/render-video-background`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: trackData?.title || 'Song Storyboard',
+          images: renderedList,
+          durationPerFrameSec: 8,
+        }),
+      });
+
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        throw new Error(`Server returned invalid response (${res.status}): ${rawText.slice(0, 100)}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Video assembly failed.');
+      }
+
+      // Automatically trigger browser download for the generated MP4 file
+      const a = document.createElement('a');
+      a.href = data.videoBase64;
+      a.download = data.videoFileName || 'Story-Reel.mp4';
+      a.click();
+    } catch (err) {
+      alert(`Video Export Error: ${err.message}`);
+    } finally {
+      setIsExportingVideo(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md font-sans">
       <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         
-        {/* Modal Header */}
+        {/* Modal Header Bar with Trigger Buttons */}
         <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-amber-400/10 text-amber-400 rounded-lg">
@@ -211,7 +260,7 @@ const StoryboardModal = ({
             </div>
           </div>
 
-          {/* Action Controls */}
+          {/* Action Toolbar */}
           <div className="flex items-center gap-2">
             {/* Aspect Ratio Switcher */}
             <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 text-[11px]">
@@ -233,7 +282,7 @@ const StoryboardModal = ({
               </button>
             </div>
 
-            {/* AI Auto-Generate */}
+            {/* AI Auto-Generate Button */}
             <button
               onClick={handleGenerateStoryboard}
               disabled={loadingStoryboard}
@@ -243,13 +292,24 @@ const StoryboardModal = ({
               <span>{storyboard ? 'Regenerate All' : 'Generate Prompts'}</span>
             </button>
 
-            {/* Add Custom Scene */}
+            {/* Add Custom Scene Button */}
             <button
               onClick={handleAddCustomScene}
               className="flex items-center gap-1 bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
             >
               <Plus size={13} className="text-amber-400" />
               <span>Add Scene</span>
+            </button>
+
+            {/* PRIMARY TRIGGER BUTTON: Option B Export Video MP4 */}
+            <button
+              onClick={handleExportFullVideo}
+              disabled={isExportingVideo || Object.keys(renderedImages).length === 0}
+              className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              title={Object.keys(renderedImages).length === 0 ? 'Render at least one keyframe first' : 'Compile and export MP4'}
+            >
+              {isExportingVideo ? <Loader2 size={13} className="animate-spin" /> : <FileVideo size={13} />}
+              <span>{isExportingVideo ? 'Rendering MP4...' : 'Export Video MP4'}</span>
             </button>
 
             {/* Close Modal */}
@@ -271,7 +331,7 @@ const StoryboardModal = ({
             </div>
           )}
 
-          {/* Empty State with Action Cards */}
+          {/* Empty State */}
           {!storyboard && !loadingStoryboard && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500 space-y-4">
               <Camera size={44} className="stroke-1 opacity-40 text-amber-400" />
@@ -302,7 +362,7 @@ const StoryboardModal = ({
             </div>
           )}
 
-          {/* Loading State */}
+          {/* Loading Animation */}
           {loadingStoryboard && (
             <div className="flex flex-col items-center justify-center py-20 text-amber-400 space-y-3">
               <Loader2 size={32} className="animate-spin" />
@@ -315,7 +375,6 @@ const StoryboardModal = ({
           {/* Active Storyboard Cards */}
           {storyboard && !loadingStoryboard && (
             <>
-              {/* Cinematic Overview Banner */}
               {storyboard.songOverview && (
                 <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5 text-xs">
                   <div className="flex items-center gap-2 text-amber-400 font-bold">
@@ -397,11 +456,10 @@ const StoryboardModal = ({
                         </div>
                       </div>
 
-                      {/* Content Grid: Prompts & Live Render Viewport */}
+                      {/* Content Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {/* Left 2 Columns: Editable Inputs */}
+                        {/* Prompts Input Column */}
                         <div className="md:col-span-2 space-y-2.5 text-xs">
-                          {/* Imagen 3 Editable Prompt Textarea */}
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
                               <Sparkles size={11} />
@@ -417,14 +475,13 @@ const StoryboardModal = ({
                             />
                           </div>
 
-                          {/* Veo 3.1 Editable Motion Textarea */}
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1">
                               <Video size={11} />
                               <span>Veo 3.1 Motion Cue (Editable)</span>
                             </label>
                             <textarea
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 font-mono focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none resize-none h-14 leading-relaxed"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 font-mono focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 outline-none resize-none h-14 leading-relaxed"
                               value={activeMotionPrompt}
                               onChange={(e) =>
                                 setCustomMotionPrompts((prev) => ({ ...prev, [idx]: e.target.value }))
@@ -433,7 +490,6 @@ const StoryboardModal = ({
                             />
                           </div>
 
-                          {/* Metadata Badges */}
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 pt-0.5">
                             {scene.lighting && (
                               <span className="flex items-center gap-1">
@@ -450,7 +506,7 @@ const StoryboardModal = ({
                           </div>
                         </div>
 
-                        {/* Right Column: Live Render Viewport */}
+                        {/* Live Render Preview Canvas */}
                         <div className="md:col-span-1 flex flex-col items-center justify-center bg-slate-900 border border-slate-800 rounded-lg overflow-hidden min-h-[160px] relative group">
                           {keyframeImage ? (
                             <>
