@@ -8,11 +8,15 @@ exports.handler = async (event) => {
   };
 
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+    return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
   }
 
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -20,93 +24,73 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: 'Missing GEMINI_API_KEY environment variable' }),
+      body: JSON.stringify({ error: 'Missing GEMINI_API_KEY in environment variables.' }),
     };
   }
 
   try {
-    const { prompt, aspectRatio = '16:9' } = JSON.parse(event.body || '{}');
-
-    if (!prompt) {
+    let payload = {};
+    try {
+      payload = JSON.parse(event.body || '{}');
+    } catch {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Missing prompt parameter' }),
+        body: JSON.stringify({ error: 'Invalid JSON request body.' }),
       };
     }
 
-    // Google Generative Multimodal Image Endpoint
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
+    const { prompt, aspectRatio = '16:9' } = payload;
+    if (!prompt || !prompt.trim()) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ error: 'Prompt is required.' }),
+      };
+    }
 
-    const payload = {
-      contents: [
-        {
-          parts: [
-            {
-              text: `Generate a high-quality cinematic keyframe image in ${aspectRatio} aspect ratio: ${prompt}`,
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        responseModalities: ['IMAGE', 'TEXT'],
-      },
-    };
+    // Call Google Generative AI Imagen 3 Endpoint
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages?key=${apiKey}`;
 
-    const response = await fetch(url, {
+    const apiResponse = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        prompt: prompt.trim(),
+        numberOfImages: 1,
+        aspectRatio: aspectRatio === '9:16' ? '9:16' : '16:9',
+        outputMimeType: 'image/jpeg',
+      }),
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      // Fallback: If gemini-2.5-flash-image returns model error, try standard imagen endpoint structure
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages?key=${apiKey}`;
-      const fallbackRes = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt,
-          numberOfImages: 1,
-          aspectRatio: aspectRatio === '9:16' ? '9:16' : '16:9',
-          outputMimeType: 'image/jpeg',
-        }),
-      });
-
-      const fallbackData = await fallbackRes.json();
-      if (!fallbackRes.ok) {
-        throw new Error(data.error?.message || fallbackData.error?.message || 'Image generation failed');
-      }
-
-      const imgBytes = fallbackData.generatedImages?.[0]?.image?.imageBytes;
-      if (imgBytes) {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            imageBase64: `data:image/jpeg;base64,${imgBytes}`,
-          }),
-        };
-      }
+    const rawText = await apiResponse.text();
+    let data;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: `Upstream API returned non-JSON: ${rawText.slice(0, 100)}` }),
+      };
     }
 
-    // Parse image from Gemini Native parts
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    let imageBase64 = null;
-
-    for (const part of parts) {
-      if (part.inlineData && part.inlineData.data) {
-        const mime = part.inlineData.mimeType || 'image/jpeg';
-        imageBase64 = `data:${mime};base64,${part.inlineData.data}`;
-        break;
-      }
+    if (!apiResponse.ok) {
+      const errMsg = data.error?.message || `Image API error (Status ${apiResponse.status})`;
+      return {
+        statusCode: apiResponse.status,
+        headers,
+        body: JSON.stringify({ error: errMsg }),
+      };
     }
 
-    if (!imageBase64) {
-      throw new Error('No image was returned in the model response.');
+    const imgBytes = data.generatedImages?.[0]?.image?.imageBytes;
+    if (!imgBytes) {
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: 'No image data returned from Imagen 3 model.' }),
+      };
     }
 
     return {
@@ -114,15 +98,14 @@ exports.handler = async (event) => {
       headers,
       body: JSON.stringify({
         success: true,
-        imageBase64: imageBase64,
+        imageBase64: `data:image/jpeg;base64,${imgBytes}`,
       }),
     };
   } catch (err) {
-    console.error('Image Generation Error:', err);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: err.message || 'Image synthesis failed' }),
+      body: JSON.stringify({ error: err.message || 'Internal Server Error' }),
     };
   }
 };
